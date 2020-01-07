@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-PUCGEN - Periodic Unit Cell generator
+PUCGEN - GUI for Periodic Unit Cell generator
 
 """
 

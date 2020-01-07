@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+PUCGEN - GUI for Periodic Unit Cell generator
+
+"""
 
 import sys
 import os
@@ -61,7 +65,7 @@ class PUC(object):
                 comp = line.strip().split(';')
                 pars = {}
                 for arg in comp[1:]:
-                    key, val = arg.split('=')
+                    key, val = [ii.strip() for ii in arg.split('=')]
                     val = val if val.isalpha() else literal_eval(val)
                     pars[key] = val
                 clsname = comp[0]
@@ -779,60 +783,11 @@ pucgen_classes = [
     SandwichLayer,
 ]
 
-# puc = PUC(cell_mat_id=3)
-# # puc.add(Cross3Channel(radius=(0, 0.08, 0, 0.3, 0.2, 0.1],
-# #                       central_point=(0, 0, 0), mat_id=1))
-# # puc.add(Cross3Channel(radius=(0, 0.1, 0, 0.25],
-# #                       central_point=(0.2, 0.2, 0.2], mat_id=2))
-# # puc.add(CylindricalChannel(radius=0.1, central_point=(-0.35, -0.2, -0.3], 
-# #                            direction=(0, 0, 1], mat_id=2))
-
-# puc.add(CylindricalChannel(radius=0.1, central_point=(-0.15, -0.2, -0.2],
-#                            direction='x', mat_id=1, es_dmin=1.3, es_dmax=1.5))
-# puc.add(CylindricalChannel(radius=0.09, central_point=(-0.15, -0.2, -0.2],
-#                            direction='y', mat_id=1, es_dmin=1.3, es_dmax=1.5))
-# puc.add(CylindricalChannel(radius=0.1, central_point=(-0.15, -0.2, -0.2],
-#                            direction='z', mat_id=1, es_dmin=1.3, es_dmax=1.5))
-# # puc.add(SphericalInclusion(radius=0.22, central_point=(-0.15, -0.2, -0.2],
-# #                            mat_id=1))
-# puc.add(EllipsoidalInclusion(radius=0.22, central_point=(-0.15, -0.2, -0.2],
-#                              mat_id=1))
-
-# puc.add(CylindricalChannel(radius=0.1, central_point=(0.15, 0.2, 0.2],
-#                            direction='x', mat_id=2, es_dmin=1.3, es_dmax=1.5))
-# puc.add(CylindricalChannel(radius=0.12, central_point=(0.15, 0.2, 0.2],
-#                            direction='y', mat_id=2, es_dmin=1.3, es_dmax=1.5))
-# puc.add(CylindricalChannel(radius=0.14, central_point=(0.15, 0.2, 0.2],
-#                            direction='z', mat_id=2, es_dmin=1.3, es_dmax=1.5))
-# # puc.add(SphericalInclusion(radius=0.22, central_point=(0.15, 0.2, 0.2],
-# #                            mat_id=2))
-# puc.add(EllipsoidalInclusion(radius=(0.22, 0.26, 0.18), central_point=(0.15, 0.2, 0.2],
-#                              mat_id=2))
-
-
-# # puc('puc_test1.vtk', 0.13, cell_size=[2, 0.8, 1])
-# puc('puc_test1.vtk', 0.14)
 
 def main():
-    # puc2 = PUC(cell_mat_id=1)
-    # puc2.add(CylindricalInclusion(radius=0.05, length=0.6, central_point=(0.1, 0, -0.25),
-    #                               direction=(1, 1, 0.5), mat_id=2, es_in=0.3))
-    # # puc2.add(CylindricalInclusion(radius=0.1, length=0.6, central_point=(-0.1, 0, 0.2),
-    # #                               direction=(-1, 1, -0.3), mat_id=3, es_in=0.3))
-    # puc2.add(CylindricalChannel(radius=0.15, central_point=(-0.1, 0, 0.2),
-    #                             direction='x', mat_id=3, es_in=0.3))
-    # # puc2.add(SweepedChannel(profile=('polyline', [[0.1, 0], [-0.05, 0.1], [-0.1, -0.1]]),
-    # #                         path=('polyline', [[0, 0], [0.2, 0], [0.3, 0.1], [0.5, 0.08], [0.9, 0], [1, 0]]),
-    # #                         central_point=(0, 0, 0),
-    # #                         direction='x', mat_id=3, es_in=0.3))
-
-    # # puc2.components[1].deactivate()
-    # # puc2.save('puc_test2.puc')
-    # # puc2('puc_test2.vtk')
-
-    fname = 'puc_test8'
-    puc = PUC.from_file(fname + '.puc')
-    puc(fname + '.vtk', save_FCStd=True)
+    fname = sys.argv[1]
+    puc = PUC.from_file(fname )
+    puc(fname + '.vtk')
 
 if __name__ == "__main__":
     main()
