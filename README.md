@@ -50,3 +50,12 @@ CylindricalChannel;radius=0.1;central_point=(0, 0, 0);direction=x;es_dmin=1.1;es
 CylindricalChannel;radius=0.15;central_point=(0, 0, 0);direction=y;es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
 CylindricalChannel;radius=0.2;central_point=(0, 0, 0);direction=z;es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
 ```
+
+Sample input `example2.puc`:
+```
+BaseCell;size=(1, 1, 1);el_size=0.1;mat_id=1
+SandwichLayer;thickness=0.1;central_point=(0, 0, 0);direction=x;es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
+SandwichLayer;thickness=0.1;central_point=(0, 0, 0);direction=y;es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
+SandwichLayer;thickness=0.1;central_point=(0, 0, 0);direction=z;es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
+EllipsoidalInclusion;radius=(0.4, 0.4, 0.4);central_point=(0, 0, 0);direction=(1, 0, 0);es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=1
+```
