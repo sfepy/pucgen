@@ -785,10 +785,46 @@ pucgen_classes = [
 
 
 def main():
-    filename = sys.argv[1]
-    puc = PUC.from_file(filename)
-    filename_vtk = os.path.splitext(filename)[0] + '.vtk'
-    puc(filename_vtk)
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+        puc = PUC.from_file(filename)
+        filename_vtk = os.path.splitext(filename)[0] + '.vtk'
+        puc(filename_vtk)
+    else:
+        from pucgen_gui import MainWindow
+        from PyQt5.QtWidgets import QApplication
+
+        app = QApplication(sys.argv)
+        mw = MainWindow()
+        sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()
+
+# usage = '%prog [options]\n' + __doc__.rstrip()
+# parser = OptionParser(description='PUCGen')
+# parser.add_option('-d','--dcmdir', action='store',
+#                   dest='dcmdir', default=None,
+#                   help=help['dcm_dir'])
+# parser.add_option('-f','--dcmfile', action='store',
+#                   dest='dcmfile', default=None,
+#                   help=help['dcm_file'])
+# parser.add_option('-s','--segfile', action='store',
+#                   dest='segfile', default=None,
+#                   help=help['seg_file'])
+# if options.dcmdir is not None:
+#     mw.loadDcmDir()
+
+# if options.dcmfile is not None:
+#     mw.loadDcm(filename=options.dcmfile)
+
+# if options.segfile is not None:
+#     mw.loadSeg(filename=options.segfile)
+# (options, args) = parser.parse_args()
+
+
+# help = {
+#     'dcm_dir': 'DICOM data direcotory',
+#     'dcm_file': 'DCM file with DICOM data',
+#     'seg_file': 'file with segmented data',
+# }

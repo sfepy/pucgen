@@ -18,8 +18,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget,\
      QComboBox, QListWidget, QDialog, QDialogButtonBox
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QColor
 
-from pucgen import PUC, pucgen_classes, BaseCell, SphericalInclusion,\
-    EllipsoidalInclusion, CylindricalInclusion, CylindricalChannel
+from pucgen import PUC, pucgen_classes
 from vtk_viewer import VTKViewer
 
 params_dict = {}
@@ -339,40 +338,9 @@ class MainWindow(QMainWindow):
                                    self.components[0][1].get('mat_id'))
                 viewer.exec_()
 
-
-usage = '%prog [options]\n' + __doc__.rstrip()
-# help = {
-#     'dcm_dir': 'DICOM data direcotory',
-#     'dcm_file': 'DCM file with DICOM data',
-#     'seg_file': 'file with segmented data',
-# }
-
 def main():
-    parser = OptionParser(description='PUCGEN')
-    # parser.add_option('-d','--dcmdir', action='store',
-    #                   dest='dcmdir', default=None,
-    #                   help=help['dcm_dir'])
-    # parser.add_option('-f','--dcmfile', action='store',
-    #                   dest='dcmfile', default=None,
-    #                   help=help['dcm_file'])
-    # parser.add_option('-s','--segfile', action='store',
-    #                   dest='segfile', default=None,
-    #                   help=help['seg_file'])
-
-    (options, args) = parser.parse_args()
-
     app = QApplication(sys.argv)
     mw = MainWindow()
-
-    # if options.dcmdir is not None:
-    #     mw.loadDcmDir()
-
-    # if options.dcmfile is not None:
-    #     mw.loadDcm(filename=options.dcmfile)
-
-    # if options.segfile is not None:
-    #     mw.loadSeg(filename=options.segfile)
-
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

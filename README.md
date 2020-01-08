@@ -37,7 +37,7 @@ Usage
 
 * GUI:
 
-      python pucgen_gui.py
+      python pucgen.py
 
 Examples:
 ---------
