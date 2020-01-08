@@ -3,7 +3,7 @@
 PUCGen - Periodic Unit Cell Generator
 =====================================
 
-A python script for genereting periodic unit cells.
+A python script for generating periodic unit cells.
 
 Requirements
 ------------
