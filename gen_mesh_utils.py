@@ -247,7 +247,7 @@ def gmsh_call(filename_base, filename_out, fields, esize,
 
         return ndgrp
 
-    geo_file = 'Merge "%s.step";\n' % filename_base
+    geo_file = 'Merge "%s.step";\n' % os.path.split(filename_base)[1]
 
     if fields is not None:
         geo_file += mesh_size_by_fields(fields, esize)
