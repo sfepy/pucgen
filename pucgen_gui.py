@@ -25,11 +25,16 @@ from vtk_viewer import VTKViewer
 params_dict = {}
 
 
-def WarningBox(s):
+def MessageBox(s, type='warning'):
+    title, qmb = {
+        'warning': ('Warning', QMessageBox.Warning),
+        'error': ('Error', QMessageBox.Critical)
+    }[type]
+
     msg = QMessageBox()
-    msg.setIcon(QMessageBox.Warning)
+    msg.setIcon(qmb)
     msg.setText(s)
-    msg.setWindowTitle('Warning')
+    msg.setWindowTitle(title)
     msg.setStandardButtons(QMessageBox.Ok)
     msg.exec_()
 
@@ -205,7 +210,7 @@ class MainWindow(QMainWindow):
     def delete_component(self):
         idx = self.listbox.currentRow()
         if idx == 0:
-            WarningBox('Can not delete Base Cell!')
+            MessageBox('Can not delete Base Cell!')
         else:
             self.components.pop(idx)
             self.listbox_update(selected=idx - 1)
@@ -213,7 +218,7 @@ class MainWindow(QMainWindow):
     def change_active(self):
         idx = self.listbox.currentRow()
         if idx == 0:
-            WarningBox('Can not deactivate Base Cell!')
+            MessageBox('Can not deactivate Base Cell!')
         else:
             self.components[idx][2] = not(self.components[idx][2])
             self.listbox_update(selected=idx)
@@ -322,10 +327,17 @@ class MainWindow(QMainWindow):
                 if act:
                     self.puc.add(cls(**pars))
 
-            self.puc(fname)
-            viewer = VTKViewer(self, fname,
-                               self.components[0][1].get('mat_id'))
-            viewer.exec_()
+            failed = False
+            try:
+                self.puc(fname)
+            except:
+                MessageBox('Gmsh error!', 'error')
+                failed = True
+
+            if not failed:
+                viewer = VTKViewer(self, fname,
+                                   self.components[0][1].get('mat_id'))
+                viewer.exec_()
 
 
 usage = '%prog [options]\n' + __doc__.rstrip()
