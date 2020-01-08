@@ -97,7 +97,7 @@ class PUC(object):
         Parameters
         ----------
         filename_vtk: str
-            The output VTK file name.
+            The VTK output file name.
         cell_size: array
             The size of PUC: [sx, sy, sz].
         eps: float
@@ -210,7 +210,7 @@ class PUC(object):
         if not centered:
             shift = nm.asarray(cell_size) * 0.5
 
-        gmsh_call(filename_base, filename_vtk, attrs, element_size,
+        gmsh_call(filename_base, filename_base + '.vtk', attrs, element_size,
                   periodicity=periodicity, merge=True,
                   physical_volumes=physical_volumes, shift=shift, scale=eps)
 
@@ -404,8 +404,8 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
         return ell, attrs
 
 
-# class SphericalInclusion(EllipsoidalInclusion):
-class SphericalInclusion(BaseEmbeddedComponent):
+# class SphericalInclusion(BaseEmbeddedComponent):
+class SphericalInclusion(EllipsoidalInclusion):
     """The spherical inclusion."""
     name = 'Spherical Inclusion'
     parameters_dict = {'radius': 0}
@@ -427,42 +427,43 @@ class SphericalInclusion(BaseEmbeddedComponent):
         es_in: float
             The "inner" element size factor: in_el_size = es_in * el_size_base. 
         """
-        super(SphericalInclusion, self).__init__(parameters=[radius],
+        # super(SphericalInclusion, self).__init__(parameters=[radius],
+        super(SphericalInclusion, self).__init__(radius=radius,
                                                  central_point=central_point,
                                                 #  direction=None,
-                                                 direction=(1, 0.7, 0.5), # magic hack
+                                                #  direction=(1, 0.7, 0.5), # magic hack
+                                                 direction=(1, 0, 0),
                                                  es_dmin=es_dmin,
                                                  es_dmax=es_dmax,
                                                  es_in=es_in,
                                                  mat_id=mat_id)
 
-    def __call__(self, cont, size):
-        r = self.get('radius')
-        p = self.get('central_point')
-        label = '%s_%d' % (self.name, self.get('mat_id'))
+    # def __call__(self, cont, size):
+    #     r = self.get('radius')
+    #     p = self.get('central_point')
+    #     label = '%s_%d' % (self.name, self.get('mat_id'))
 
-        attrs = []
+    #     attrs = []
 
-        if r == 0:
-            return None, None
+    #     if r == 0:
+    #         return None, None
 
-        ell = cont.addObject('Part::Sphere', label)
-        ell.Radius = r
-        ell.Placement = Base.Placement(Base.Vector(*p), Base.Rotation())
+    #     ell = cont.addObject('Part::Sphere', label)
+    #     ell.Radius = r
+    #     ell.Placement = Base.Placement(Base.Vector(*p), Base.Rotation())
 
-        d = self.get('direction')
-        s = nm.cross([1, 0, 0], d)
-        if nm.linalg.norm(s) > 1e-12:
-            phi = nm.rad2deg(nm.arccos(nm.dot([1, 0, 0], d)))
-            rot = Base.Rotation(Base.Vector(*s), phi)
-            ell.Placement = Base.Placement(Base.Vector(), rot,\
-                Base.Vector(*p)).multiply(ell.Placement)
+    #     d = self.get('direction')
+    #     s = nm.cross([1, 0, 0], d)
+    #     if nm.linalg.norm(s) > 1e-12:
+    #         phi = nm.rad2deg(nm.arccos(nm.dot([1, 0, 0], d)))
+    #         rot = Base.Rotation(Base.Vector(*s), phi)
+    #         ell.Placement = Base.Placement(Base.Vector(), rot,\
+    #             Base.Vector(*p)).multiply(ell.Placement)
 
-        attrs = [('sphere', p, r * self.get('es_dmin'),
-                 r * self.get('es_dmax'), self.get('es_in'))]
+    #     attrs = [('sphere', p, r * self.get('es_dmin'),
+    #              r * self.get('es_dmax'), self.get('es_in'))]
 
-        return ell, attrs
-# [(5, 12), (8, 10), (7, 11), (0, 13), (6, 9), (0, 13), (6, 9)]
+    #     return ell, attrs
 
 class CylindricalInclusion(BaseEmbeddedComponent):
     """The cylindrical inclusion."""
@@ -582,8 +583,7 @@ class BoxInclusion(BaseEmbeddedComponent):
     parameters_dict = {'size': 0}
     
     def __init__(self, size=(0.3, 0.2, 0.1), central_point=(0, 0, 0),
-                 direction=None, es_dmin=1.1, es_dmax=1.3, es_in=0.5,
-                 mat_id=2):
+                 es_dmin=1.1, es_dmax=1.3, es_in=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -601,7 +601,7 @@ class BoxInclusion(BaseEmbeddedComponent):
         """
         super(BoxInclusion, self).__init__(parameters=[size],
                                            central_point=central_point,
-                                           direction=direction,
+                                           direction=None,
                                            es_dmin=es_dmin,
                                            es_dmax=es_dmax,
                                            es_in=es_in,
@@ -665,11 +665,11 @@ class SandwichLayer(BoxInclusion):
         """
         super(SandwichLayer, self).__init__(size=thickness,
                                             central_point=central_point,
-                                            direction=direction,
                                             es_dmin=es_dmin,
                                             es_dmax=es_dmax,
                                             es_in=es_in,
                                             mat_id=mat_id)
+        self.params['direction'] = direction
 
 
 class SweepedChannel(BaseEmbeddedComponent):
@@ -785,9 +785,10 @@ pucgen_classes = [
 
 
 def main():
-    fname = sys.argv[1]
-    puc = PUC.from_file(fname )
-    puc(fname + '.vtk')
+    filename = sys.argv[1]
+    puc = PUC.from_file(filename)
+    filename_vtk = os.path.splitext(filename)[0] + '.vtk'
+    puc(filename_vtk)
 
 if __name__ == "__main__":
     main()
