@@ -1,12 +1,10 @@
 ![pucgen_logo.png](pucgen_logo.png) 
 
-PUCGen - Periodic Unit Cell Generator
-=====================================
+# PUCGen - Periodic Unit Cell Generator
 
 A python script for generating periodic unit cells.
 
-Requirements
-------------
+## Requirements
 
 * [Gmsh](http://gmsh.info/) - three-dimensional finite element mesh generator
 * [FreeCAD](https://www.freecadweb.org) - 3D CAD/CAE parametric modeling application
@@ -17,8 +15,7 @@ On Ubuntu based Linux distributions users can use the following command to insta
 
     apt install gmsh freecad python-pyqt5 python-pyqt5.qtopengl python-vtk6
 
-Installation
-------------
+## Installation
 
 * Download the code from the git repository:
 
@@ -30,8 +27,7 @@ or
 
       pip install git+git://github.com/vlukes/mumpspy
 
-Usage
------
+## Usage
 
 * Command line:
 
@@ -41,10 +37,10 @@ Usage
 
       python pucgen.py
 
-Examples:
----------
+## Examples:
 
-Sample input `example1.puc`:
+#### `example1.puc`:
+
 ```
 BaseCell;size=(1, 1, 1);el_size=0.1;mat_id=1
 SphericalInclusion;radius=0.3;central_point=(0, 0, 0);es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
@@ -54,7 +50,7 @@ CylindricalChannel;radius=0.2;central_point=(0, 0, 0);direction=z;es_dmin=1.1;es
 ```
 ![example1.png](examples/example1.png)
 
-Sample input `example2.puc`:
+#### `example2.puc`:
 ```
 BaseCell;size=(2, 1, 1);el_size=0.1;mat_id=1
 SandwichLayer;thickness=0.1;central_point=(0, 0, 0);direction=x;es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
@@ -64,7 +60,7 @@ EllipsoidalInclusion;radius=(0.8, 0.4, 0.4);central_point=(0, 0, 0);direction=(1
 ```
 ![example2.png](examples/example2.png)
 
-Sample input `example3.puc`:
+#### `example3.puc`:
 ```
 BaseCell;size=(1, 1, 1);el_size=0.1;mat_id=1
 SphericalInclusion;radius=0.2;central_point=(-0.2, 0.2, -0.2);es_dmin=1.1;es_dmax=1.3;es_in=0.4;mat_id=2
@@ -75,7 +71,7 @@ EllipsoidalInclusion;radius=(0.4, 0.15, 0.1);central_point=(-0.15, -0.15, 0.25);
 ![example3.png](examples/example3.png)
 
 
-Sample input `example4.puc`:
+#### `example4.puc`:
 ```
 BaseCell;size=(1, 1, 1);el_size=0.1;mat_id=1
 SphericalInclusion;radius=0.4;central_point=(0, 0, 0);es_dmin=1.1;es_dmax=1.3;es_in=0.5;mat_id=2
