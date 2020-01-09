@@ -37,37 +37,90 @@ def MessageBox(s, type='warning'):
     msg.setStandardButtons(QMessageBox.Ok)
     msg.exec_()
 
+check_edit_types = {
+    'np': ['mat_id', 'radius', 'length', 'thickness',
+          'es_dmin', 'es_dmax', 'es_in', 'size', 'size_x', 'el_size'],
+    'n3p': ['radius', 'size', 'grid'],
+    'n3': ['central_point', 'direction'],
+    's': ['direction'],
+    'o': ['filename_in', 'filename_out'],
+}
+
+def check_edits(edits):
+    pars = {}
+    ok_ = True
+
+    for k in edits.keys():
+        ok = True
+        val = edits[k].text()
+        if k in check_edit_types['o']:
+            pars[k] = val
+        elif k in check_edit_types['s'] and val.isalpha():
+            pars[k] = val
+        else:
+            try:
+                pars[k] = literal_eval(val)
+            except:
+                ok = False
+   
+            if ok:
+                if k in check_edit_types['np']\
+                    and isinstance(pars[k], (int, float))\
+                    and pars[k] > 0:
+                    pass
+                elif k in check_edit_types['n3p']\
+                    and isinstance(pars[k], tuple)\
+                    and reduce(lambda a, b: a and b,
+                               map(lambda x: x>=0, pars[k])):
+                    pass
+                elif  k in check_edit_types['n3']\
+                    and isinstance(pars[k], tuple):
+                    pass
+                else:
+                    ok = False
+
+        if ok:
+            edits[k].setStyleSheet('background-color: white')
+        else:
+            edits[k].setStyleSheet('background-color: red')
+
+        ok_ = ok_ and ok
+
+    return pars, ok_
 
 class SetParamsDialog(QDialog):
-    def __init__(self, parent, name, params, err_lines=[]):
+    def __init__(self, parent, name, params):
         super(SetParamsDialog, self).__init__(parent=parent)
-        self.setWindowTitle('Edit %s parameters' % name)
 
-        self.vbox = QVBoxLayout()
-        self.params_dict = {}
+        self.edits = {}
         params_tr_dict = {
             'mat_id': 'material id',
             'central_point': 'central point',
             'el_size': 'element size',
         }
-        for ii, (nm, val) in enumerate(params):
+
+        self.setWindowTitle('Edit %s parameters' % name)
+        self.vbox = QVBoxLayout()
+        for nm, val in params:
             hbox = QHBoxLayout()
             hbox.addWidget(QLabel('%s:' % params_tr_dict.get(nm, nm)))
             le = QLineEdit(val)
-            if ii in err_lines:
-                le.setStyleSheet('background-color: red')
-            self.params_dict[nm] = le  
+            self.edits[nm] = le  
             hbox.addStretch(1)
             hbox.addWidget(le)
             self.vbox.addLayout(hbox)
 
         btns = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         btnbox = QDialogButtonBox(btns)
-        btnbox.accepted.connect(self.accept)
+        btnbox.accepted.connect(self.check_values)
         btnbox.rejected.connect(self.reject)
         self.vbox.addWidget(btnbox)
         self.setLayout(self.vbox)
 
+    def check_values(self):
+        self.params_dict, ok = check_edits(self.edits)
+        if ok:
+            return self.accept()
 
 class MainWindow(QMainWindow):
 
@@ -79,6 +132,99 @@ class MainWindow(QMainWindow):
         self.components = []
 
         self.initUI()
+
+    def init_RepeaterTab(self):
+        vbox = QVBoxLayout()
+        vbox.setSpacing(10)
+
+        vbox = QVBoxLayout()
+
+        hbox1 = QHBoxLayout()
+        hbox1.addWidget(QLabel('Input VTK file:'))
+        hbox1.addStretch(1)
+        vbox.addLayout(hbox1)
+
+        hbox2 = QHBoxLayout()
+        self.repeter_in_file = QLineEdit('')
+        hbox2.addWidget(self.repeter_in_file)
+        btn_select_in_file = QPushButton('...', self)
+        btn_select_in_file.clicked.connect(self.repeater_select_in_file)
+        width = btn_select_in_file.fontMetrics().boundingRect('...').width() + 20
+        btn_select_in_file.setMaximumWidth(width)
+        hbox2.addWidget(btn_select_in_file)
+        vbox.addLayout(hbox2)
+
+        hbox1b = QHBoxLayout()
+        hbox1b.addWidget(QLabel('Output VTK file:'))
+        hbox1b.addStretch(1)
+        vbox.addLayout(hbox1b)
+
+        hbox2b = QHBoxLayout()
+        self.repeter_out_file = QLineEdit('')
+        hbox2b.addWidget(self.repeter_out_file)
+        btn_select_out_file = QPushButton('...', self)
+        btn_select_out_file.clicked.connect(self.repeater_select_out_file)
+        width = btn_select_out_file.fontMetrics().boundingRect('...').width() + 20
+        btn_select_out_file.setMaximumWidth(width)
+        hbox2b.addWidget(btn_select_out_file)
+        vbox.addLayout(hbox2b)
+
+        hbox3 = QHBoxLayout()
+        hbox3.addWidget(QLabel('Grid:'))
+        grid = QLineEdit('1, 1, 1')
+        hbox3.addWidget(grid)
+        hbox3.addStretch(1)
+        vbox.addLayout(hbox3)
+
+        hbox4 = QHBoxLayout()
+        hbox4.addWidget(QLabel('Size_x:'))
+        size_x = QLineEdit('1')
+        hbox4.addWidget(size_x)
+        hbox4.addStretch(1)
+        vbox.addLayout(hbox4)
+
+        hbox5 = QHBoxLayout()
+        hbox5.addStretch(1)
+        btn_gen_grid = QPushButton('Generate grid', self)
+        btn_gen_grid.clicked.connect(self.repeater_generate_grid)
+        hbox5.addWidget(btn_gen_grid)
+        hbox5.addStretch(1)
+
+        vbox.addStretch(1)
+        vbox.addLayout(hbox5)
+        vbox.addStretch(1)
+
+        self.edits_to_check = {'grid': grid, 'size_x': size_x,
+                               'filename_in': self.repeter_in_file,
+                               'filename_out': self.repeter_out_file}
+
+        return vbox
+
+    def repeater_generate_grid(self):
+        from gen_mesh_utils import repeater
+
+        ok = 1
+        pars, ok = check_edits(self.edits_to_check)
+        if ok:
+            repeater(self.repeter_in_file.text(),
+                     self.repeter_out_file.text(),
+                     pars['grid'], pars['size_x'])
+            viewer = VTKViewer(self, self.repeter_out_file.text(), mat_id=None)
+            viewer.exec_()
+
+    def repeater_select_in_file(self):
+        fname, _ = QFileDialog.getOpenFileName(self, 'Input VTK file',
+                                               filter='Files (*.vtk)')
+
+        if fname:
+            self.repeter_in_file.setText(fname)
+
+    def repeater_select_out_file(self):
+        fname, _ = QFileDialog.getSaveFileName(self, 'Output VTK file',
+                                               filter='Files (*.vtk)')
+
+        if fname:
+            self.repeter_out_file.setText(fname)
 
     def init_GeneratorTab(self):
 
@@ -121,7 +267,6 @@ class MainWindow(QMainWindow):
         self.listbox = QListWidget()
         self.listbox_update(selected=0)
         vbox2.addWidget(self.listbox)
-        # vbox2.addStretch(1)
 
         hbox = QHBoxLayout()
         hbox.addStretch(1)
@@ -133,6 +278,21 @@ class MainWindow(QMainWindow):
         vbox.addStretch(1)
         vbox.addLayout(hbox)
         vbox.addStretch(1)
+
+        hbox = QHBoxLayout()
+        hbox.addStretch(1)
+        btn_save = QPushButton('Save', self)
+        btn_save.clicked.connect(self.save_puc)
+        hbox.addWidget(btn_save)
+        btn_load = QPushButton('Load', self)
+        btn_load.clicked.connect(self.load_puc)
+        hbox.addWidget(btn_load)
+        btn_generate = QPushButton('Generate', self)
+        btn_generate.clicked.connect(self.generate)
+        hbox.addWidget(btn_generate)
+        hbox.addStretch(1)
+
+        vbox.addLayout(hbox)
 
         self.new_component(base_cell=True)
 
@@ -167,9 +327,6 @@ class MainWindow(QMainWindow):
         cls, pars, act = self.components[idx]
         clsargs = self.class_args[cls.__name__]
 
-        status = 0
-        err_lines = []
-        pars0 = deepcopy(pars)
         scpars = []
         for k, _ in clsargs:
             val = pars[k]
@@ -177,34 +334,12 @@ class MainWindow(QMainWindow):
                 else str(val)
             scpars.append([k, sval])
 
-        while not(status):
-            dlg = SetParamsDialog(self, cls.__name__, scpars,
-                                  err_lines)
-            if dlg.exec_():
-                status = 1
-                ncpars = dlg.params_dict
-                err_lines = []
-                for ii, (k, _) in enumerate(clsargs):
-                    val = ncpars[k].text()
-                    scpars[ii][1] = val
-                    if val.isalpha():
-                        pars[k] = val
-                    else:
-                        try:
-                            pars[k] = literal_eval(val)
-                        except SyntaxError:
-                            status = 0
-                            err_lines.append(ii)
+        dlg = SetParamsDialog(self, cls.__name__, scpars)
+        if dlg.exec_():
+            for k in pars.keys():
+                 pars[k] = dlg.params_dict[k]
 
-            else:
-                status = -1
-
-        if status > 0:
             self.listbox_update(selected=idx)
-        else:
-            for k, v in pars0.items():
-                pars[k] = v
-            # WarningBox('Parameters of %s not changed!' % clsname)
 
     def delete_component(self):
         idx = self.listbox.currentRow()
@@ -274,32 +409,29 @@ class MainWindow(QMainWindow):
         vbox.addLayout(hbox)
 
         tabs = QTabWidget()
-        tab1 = QWidget()
 
+        tab1 = QWidget()
         tab1.setLayout(self.init_GeneratorTab())
         tabs.addTab(tab1, 'Generator')
+
+        tab3 = QWidget()
+        tab3.setLayout(self.init_RepeaterTab())
+        tabs.addTab(tab3, 'Repeater')
+
         vbox.addWidget(tabs)
 
         # save, load, generate, quit
         hbox = QHBoxLayout()
         hbox.addStretch(1)
-        btn_save = QPushButton('Save', self)
-        btn_save.clicked.connect(self.save_puc)
-        btn_load = QPushButton('Load', self)
-        btn_load.clicked.connect(self.load_puc)
-        btn_generate = QPushButton('Generate', self)
-        btn_generate.clicked.connect(self.generate)
         btn_quit = QPushButton('Quit', self)
         btn_quit.clicked.connect(self.quit)
-        hbox.addWidget(btn_save)
-        hbox.addWidget(btn_load)
-        hbox.addWidget(btn_generate)
         hbox.addWidget(btn_quit)
         hbox.addStretch(1)
 
         vbox.addLayout(hbox)
 
         cw.setLayout(vbox)
+
         self.setWindowTitle('PUCGen')
         self.show()
 
