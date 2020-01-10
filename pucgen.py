@@ -119,6 +119,7 @@ class PUC(object):
         attrs = []
         mat_ids = []
         volumes = {}
+        bcell_mat_id = self.components[0].params['mat_id']
         for comp in self.components:
             if not comp.active:
                 continue
@@ -134,7 +135,7 @@ class PUC(object):
                 volumes[mat_id] = [obj]
                 mat_ids.append(mat_id)
 
-            if attr is not None:
+            if attr is not None and not(mat_id == bcell_mat_id):
                 attrs += attr
 
         bcell = volumes[mat_ids[0]]
