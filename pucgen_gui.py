@@ -69,12 +69,12 @@ def check_edits(edits):
                     and pars[k] > 0:
                     pass
                 elif k in check_edit_types['n3p']\
-                    and isinstance(pars[k], tuple)\
+                    and isinstance(pars[k], tuple) and len(pars[k]) == 3\
                     and reduce(lambda a, b: a and b,
                                map(lambda x: x>=0, pars[k])):
                     pass
                 elif  k in check_edit_types['n3']\
-                    and isinstance(pars[k], tuple):
+                    and isinstance(pars[k], tuple) and len(pars[k]) == 3:
                     pass
                 else:
                     ok = False
