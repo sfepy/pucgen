@@ -37,6 +37,28 @@ def MessageBox(s, type='warning'):
     msg.setStandardButtons(QMessageBox.Ok)
     msg.exec_()
 
+def OverwriteBox(filename):
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Warning)
+    msg.setText('The file "%s" already exists. Do you wish to overwrite it?' % filename)
+    msg.setWindowTitle('Overwrite File?')
+    msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+    btn_ok = msg.button(QMessageBox.Ok)
+    btn_ok.setText('Overwrite')
+    msg.exec_()
+
+    if msg.clickedButton() == btn_ok:
+        return True
+    else:
+        return False
+
+def select_vtk_file(parent, s, le, default=''):
+    dlg = QFileDialog(parent, s, default, 'VTK(*.vtk)')
+    dlg.setLabelText(QFileDialog.Accept, 'Choose')
+    if dlg.exec_():
+        le.setText(dlg.selectedFiles()[0])
+        le.setStyleSheet('background-color: white')
+
 check_edit_types = {
     'np': ['mat_id', 'radius', 'length', 'thickness',
           'es_dmin', 'es_dmax', 'es_in', 'size', 'size_x', 'el_size'],
@@ -203,28 +225,25 @@ class MainWindow(QMainWindow):
     def repeater_generate_grid(self):
         from gen_mesh_utils import repeater
 
-        ok = 1
         pars, ok = check_edits(self.edits_to_check)
+
         if ok:
-            repeater(self.repeter_in_file.text(),
-                     self.repeter_out_file.text(),
+            out_file = pars['filename_out']
+            if os.path.exists(out_file):
+                ok = ok & OverwriteBox(os.path.split(out_file)[1])
+
+        if ok:
+            repeater(pars['filename_in'],
+                     out_file,
                      pars['grid'], pars['size_x'])
-            viewer = VTKViewer(self, self.repeter_out_file.text(), mat_id=None)
+            viewer = VTKViewer(self, out_file, mat_id=None)
             viewer.exec_()
 
     def repeater_select_in_file(self):
-        fname, _ = QFileDialog.getOpenFileName(self, 'Input VTK file',
-                                               filter='Files (*.vtk)')
-
-        if fname:
-            self.repeter_in_file.setText(fname)
+        select_vtk_file(self, 'Input VTK file', self.repeter_in_file)
 
     def repeater_select_out_file(self):
-        fname, _ = QFileDialog.getSaveFileName(self, 'Output VTK file',
-                                               filter='Files (*.vtk)')
-
-        if fname:
-            self.repeter_out_file.setText(fname)
+        select_vtk_file(self, 'Output VTK file', self.repeter_out_file)
 
     def init_GeneratorTab(self):
 
@@ -280,6 +299,21 @@ class MainWindow(QMainWindow):
         vbox.addStretch(1)
 
         hbox = QHBoxLayout()
+        hbox.addWidget(QLabel('Output VTK file:'))
+        hbox.addStretch(1)
+        vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+        self.generator_out_file = QLineEdit('')
+        hbox.addWidget(self.generator_out_file)
+        btn_select_in_file = QPushButton('...', self)
+        btn_select_in_file.clicked.connect(self.generator_select_out_file)
+        width = btn_select_in_file.fontMetrics().boundingRect('...').width() + 20
+        btn_select_in_file.setMaximumWidth(width)
+        hbox.addWidget(btn_select_in_file)
+        vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
         hbox.addStretch(1)
         btn_save = QPushButton('Save', self)
         btn_save.clicked.connect(self.save_puc)
@@ -297,6 +331,9 @@ class MainWindow(QMainWindow):
         self.new_component(base_cell=True)
 
         return vbox
+
+    def generator_select_out_file(self):
+        select_vtk_file(self, 'Output VTK file', self.generator_out_file)
 
     def listbox_update(self, selected=0):
         self.listbox.clear()
@@ -438,13 +475,18 @@ class MainWindow(QMainWindow):
     def quit(self, event):
         self.close()
 
-    def generate(self, **kwargs):
-        fname = kwargs.get('fname', None)
-        if fname is None:
-            fname, _ = QFileDialog.getSaveFileName(self, 'Save VTK file',
-                                                   filter='Files (*.vtk)')
+    def generate(self):
+        pars, ok = check_edits({'filename_out': self.generator_out_file})
+        print self.generator_out_file.text()
+        print pars
+        print ok
 
-        if len(fname) > 0:
+        if ok:
+            out_file = pars['filename_out']
+            if os.path.exists(out_file):
+                ok = ok & OverwriteBox(os.path.split(out_file)[1])
+
+        if ok and len(out_file) > 0:
             self.puc = PUC(cell_mat_id=None)
             for cls, pars, act in self.components:
                 if act:
@@ -452,13 +494,13 @@ class MainWindow(QMainWindow):
 
             failed = False
             try:
-                self.puc(fname)
+                self.puc(out_file)
             except:
                 MessageBox('Gmsh error!', 'error')
                 failed = True
 
             if not failed:
-                viewer = VTKViewer(self, fname,
+                viewer = VTKViewer(self, out_file,
                                    self.components[0][1].get('mat_id'))
                 viewer.exec_()
 
