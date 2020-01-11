@@ -53,7 +53,7 @@ def check_edits(edits):
     for k in edits.keys():
         ok = True
         val = edits[k].text()
-        if k in check_edit_types['o']:
+        if k in check_edit_types['o'] and len(val) > 0:
             pars[k] = val
         elif k in check_edit_types['s'] and val.isalpha():
             pars[k] = val
