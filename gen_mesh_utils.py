@@ -3,7 +3,7 @@ import sys
 import numpy as nm
 
 from mshio import msh_read
-from vtkio import vtk_write
+from vtkio import vtk_read, vtk_write
 
 def vec2list(v):
     return [v.x, v.y, v.z]
@@ -274,7 +274,6 @@ def gmsh_call(filename_base, filename_out, fields, esize,
     }
 
     if merge:
-        # print('merging nodes')
         nodes, elems, data = merge_nodes(nodes, elems, data,
                                          tol=periodicity_tol)
 
@@ -299,3 +298,28 @@ def gmsh_call(filename_base, filename_out, fields, esize,
         nodes *= scale
 
     vtk_write(filename_out, nodes, elems, export_elems, data)
+
+def repeater(filename_in, filename_out, grid, size_x, tol=1e-9):
+    nodes, elems, elem_type, data = vtk_read(filename_in, ret_pc_data=False)
+
+    for idim, igrid in enumerate(grid):
+        if igrid <= 0:
+            raise ValueError('Incorrect numer of repetition! (%s)' % grid)
+
+        idir = nm.eye(3)[idim]
+        nnodes = nodes.shape[0]
+
+        nodes = nm.vstack(nodes + idir * ii for ii in range(igrid))
+        elems = nm.vstack(elems + nnodes * ii for ii in range(igrid))
+        repdata = {}
+        for k, v in data.iteritems():
+            if len(v[2].shape) > 1:
+                repdata[k] = (v[0], v[1], nm.vstack([v[2]] * igrid))
+            else:
+                repdata[k] = (v[0], v[1], nm.hstack([v[2]] * igrid))
+
+        nodes, elems, data = merge_nodes(nodes, elems, repdata, tol=tol)
+
+    scale = float(size_x) / nm.max(nodes[:, 0])
+
+    vtk_write(filename_out, nodes * scale, elems, elem_type, data)
