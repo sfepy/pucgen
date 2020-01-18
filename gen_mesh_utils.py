@@ -124,12 +124,14 @@ def gmsh_call(filename_base, dim=3, export_elems='3_4',
 def repeater(filename_in, filename_out, grid, size_x, tol=1e-9):
     nodes, elems, elem_type, data = vtk_read(filename_in, ret_pc_data=False)
 
+    cell_size = nm.max(nodes, axis=0) - nm.min(nodes, axis=0)
+
     for idim, igrid in enumerate(grid):
         if igrid <= 0:
             raise ValueError('Incorrect numer of repetition! (%s)' % grid)
 
-        idir = nm.eye(3)[idim]
         nnodes = nodes.shape[0]
+        idir = nm.eye(3)[idim] * cell_size
 
         nodes = nm.vstack(nodes + idir * ii for ii in range(igrid))
         elems = nm.vstack(elems + nnodes * ii for ii in range(igrid))
