@@ -10,6 +10,7 @@ import os
 import numpy as nm
 from inspect import getargspec
 from ast import literal_eval
+from optparse import OptionParser
 
 from gen_mesh_utils import gmsh_call, repeater
 
@@ -637,26 +638,52 @@ pucgen_classes = [
     SandwichLayer,
 ]
 
+usage = 'Usage: %prog [[options] filename_in]'
+version = '0.1'
+helps = {
+    'reps': 'construct grid by repeating unit cell, number of repetition defined by NX, NY, NZ',
+    'scale': 'scale unit cell by SCALE factor, if `--tile` or `-t` employed, SCALE is grid size in x-direction',
+    'filename_out': 'write VTK output to FILE',
+}
 
 def main():
-    if len(sys.argv) == 2:
-        filename = sys.argv[1]
-        puc = PUC.from_file(filename)
-        filename_vtk = os.path.splitext(filename)[0] + '.vtk'
-        puc(filename_vtk)
-    elif len(sys.argv) == 4:
-        filename_in = sys.argv[1]
-        filename_out = sys.argv[2]
-        grid = literal_eval(sys.argv[3])
-        scale_x = float(sys.argv[4])
-        repeater(filename_in, filename_out, grid, scale_x)
-    else:
+    parser = OptionParser(usage=usage, version='%prog ' + version)
+    parser.add_option('-t', '--tile', metavar='"NX,NY,NZ"',
+                      action='store', dest='reps', default=None,
+                      help=helps['reps'])
+    parser.add_option('-s', '--scale', metavar='SCALE',
+                      action='store', dest='scale', default=1.0,
+                      help=helps['scale'])
+    parser.add_option('-o', '--output', metavar='FILE',
+                      action='store', dest='filename_out', default=None,
+                      help=helps['filename_out'])
+
+    (options, args) = parser.parse_args()
+
+    if len(args) == 0: # run GUI
         from pucgen_gui import MainWindow
         from PyQt5.QtWidgets import QApplication
 
         app = QApplication(sys.argv)
         mw = MainWindow()
         sys.exit(app.exec_())
+    else:
+        filename_base, filename_ext = os.path.splitext(args[0])
+
+        if options.filename_out is not None:
+            filename_out = options.filename_out
+        else:
+            filename_out = filename_base + '.vtk'
+
+        if filename_ext == '.puc': # run generator
+            puc = PUC.from_file(args[0])
+            puc(filename_out, eps=float(options.scale))
+
+        if options.reps is not None:
+            filename_in = args[0] if filename_ext == '.vtk' else filename_out
+            repeater(filename_in, filename_out,
+                     literal_eval(options.reps), float(options.scale))
+
 
 if __name__ == "__main__":
     main()
