@@ -11,13 +11,27 @@ import numpy as nm
 from inspect import getargspec
 from ast import literal_eval
 
-FREECADPATH = '/usr/lib/freecad/lib/'
-sys.path.append(FREECADPATH)
-from FreeCAD import Base, newDocument
-import Sketcher
-import Part
 from gen_mesh_utils import gmsh_call, repeater
 
+
+def l2s(l):
+    return str(list(l))[1:-1]
+
+def b2s_delete(b):
+    return 'Delete;' if b else ''
+
+def geo_obj(obj, pars):
+    return '%s(%%d) = {%s};' % (obj, l2s(pars))
+
+def volumes_union(l1, l2, el_size, delete1=True, delete2=True):
+    esize = nm.min([el_size[k] for k in l1 + l2])
+    return "BooleanUnion(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
+        % (l2s(l1), b2s_delete(delete1), l2s(l2), b2s_delete(delete2)), esize
+
+def volumes_difference(l1, l2, el_size, delete1=True, delete2=True):
+    esize = nm.min([el_size[k] for k in l1])
+    return "BooleanDifference(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
+        % (l2s(l1), b2s_delete(delete1), l2s(l2), b2s_delete(delete2),), esize
 
 class PUC(object):
     """Periodic Unit Cell object."""
@@ -91,8 +105,7 @@ class PUC(object):
 
         return new
 
-    def __call__(self, filename_vtk, cell_size=None, eps=1.0,
-                 save_FCStd=False, centered=False):
+    def __call__(self, filename_vtk, cell_size=None, eps=1.0, centered=False):
         """Generate the finite element mesh.
 
         Parameters
@@ -103,119 +116,127 @@ class PUC(object):
             The size of PUC: [sx, sy, sz].
         eps: float
             The scaling parameter.
-        save_FCStd: bool
-            If True, save the FreeCAD data file.
         centered: bool
             If True, the PUC is centered to the origin.
         """
-
         if cell_size is None:
             cell_size = self.components[0].get('size')
 
         element_size = self.components[0].get('el_size')
-
         cell_size = nm.asarray(cell_size, dtype=nm.float64)
-        doc = newDocument()
 
-        attrs = []
+        geo = []
+
         mat_ids = []
+        el_size = {}
         volumes = {}
+        vid = 1
         bcell_mat_id = self.components[0].params['mat_id']
         for comp in self.components:
             if not comp.active:
                 continue
 
             mat_id = comp.params['mat_id']
-            obj, attr = comp(doc, cell_size)
-            if obj is None:
+            geo_line, esize = comp(vid, cell_size)
+            if geo_line is None:
                 continue
 
+            geo.append(geo_line)
+            el_size[vid] = esize
+
             if mat_id in volumes:
-                volumes[mat_id].append(obj)
+                volumes[mat_id].append(vid)
             else:
-                volumes[mat_id] = [obj]
+                volumes[mat_id] = [vid]
                 mat_ids.append(mat_id)
 
-            if attr is not None and not(mat_id == bcell_mat_id):
-                attrs += attr
+            vid += 1
 
-        bcell = volumes[mat_ids[0]]
+        bcell = volumes[bcell_mat_id]
         if len(bcell) == 2:
             bcell_ctool = bcell[1]
         elif len(bcell) >= 3:
-            bcell_ctool = doc.addObject('Part::MultiFuse', 'uni_1')
-            bcell_ctool.Shapes = bcell[1:]
-            pass
+            geo_line, esize = volumes_union([bcell[1]], bcell[2:], el_size)
+            geo.append(geo_line % vid)
+            el_size[vid] = esize
+            bcell_ctool = vid
+            vid += 1
         else:
             bcell_ctool = None
 
         objs = [bcell[0]]
         for mat_id in mat_ids[1:]:
             if len(volumes[mat_id]) >= 2:
-                uni = doc.addObject('Part::MultiFuse', 'uni_%d' % mat_id)
-                uni.Shapes = volumes[mat_id]
+                geo_line, esize = volumes_union([volumes[mat_id][0]],
+                                                 volumes[mat_id][1:], el_size)
+                geo.append(geo_line % vid)
+                el_size[vid] = esize
+                uni = vid
+                vid += 1
             else:
                 uni = volumes[mat_id][0]
 
             if bcell_ctool is None:
                 objs.append(uni)
             else:
-                cut = doc.addObject('Part::Cut', 'cut_%d' % mat_id)
-                cut.Base = uni
-                cut.Tool = bcell_ctool
-                objs.append(cut) 
-
-        doc.recompute()
+                geo_line, esize = volumes_difference([uni], [bcell_ctool],
+                                                     el_size)
+                geo.append(geo_line % vid)
+                el_size[vid] = esize
+                objs.append(vid)
+                vid += 1
 
         if len(objs) > 1:
-            if len(objs) > 2:
-                uni = doc.addObject('Part::MultiFuse', 'uni')
-                uni.Shapes = objs[1:]
-            else:
-                uni = objs[1]
-            
-            cut = doc.addObject('Part::Cut', 'cut')
-            cut.Base = objs[0]
-            cut.Tool = uni
-            objs[0] = cut
+            geo_line, esize = volumes_difference([objs[0]], objs[1:],
+                                                 el_size, delete2=False)
+            geo.append(geo_line % vid)
+            el_size[vid] = esize
+            objs[0] = vid
+            vid += 1
 
-        for io, obj in enumerate(objs):
-            grp = doc.addObject('App::DocumentObjectGroup', 'grp_%d' % (io + 1))
-            grp.addObject(obj)
+        geo.append('Coherence;')
 
-        doc.recompute()
+        geo.append('')
+        for obj, mat_id in zip(objs, mat_ids):
+            geo.append('Physical Volume(%d) = {%d};' % (mat_id, obj))
 
-        physical_volumes = {}
-        ivol = 1
-        for io, (obj, mat_id) in enumerate(zip(objs, mat_ids)):
-            if mat_id not in physical_volumes:
-                physical_volumes[mat_id] = []
-            for _ in range(len(obj.Shape.Solids)):
-                physical_volumes[mat_id].append(ivol)
-                ivol += 1
+        geo.append('')
+        for obj in objs[1:]:
+            geo.append('p%d() = PointsOf{Volume{%d};};' % (obj, obj))
+            geo.append('Characteristic Length{p%d()} = %e;'
+                % (obj, element_size * el_size[obj]))
+
+        peps = nm.max(cell_size) * 1e-3
+        sib = 'Surface In BoundingBox'
+        p1 = (cell_size + peps * nm.ones(3)) * 0.5
+        p0 = -p1
+
+        geo.append('')
+        for idir, per in enumerate(['x', 'y', 'z']):
+            pdir = nm.eye(3)[idir] * cell_size
+            p2 = p1 - pdir
+            geo.append('per%s%d() = %s{%e,%e,%e,%e,%e,%e};'
+                % ((per, 1, sib) + tuple(p0) + tuple(p2)))
+            geo.append('per%s%d() = %s{%e,%e,%e,%e,%e,%e};'
+                % ((per, 2, sib) + tuple(p0 + pdir) + tuple(p2 + pdir)))
+            geo.append('Periodic Surface{per%s%d()} = {per%s%d()} Translate{%e,%e,%e};'
+                % ((per, 2, per, 1) + tuple(pdir)))
+
+        geo_content = [
+            'SetFactory("OpenCASCADE");',
+            'Mesh.CharacteristicLengthMin = %e;' % (element_size * 0.01),
+            'Mesh.CharacteristicLengthMax = %e;' % element_size,
+            ''] + geo
 
         filename_base = os.path.splitext(filename_vtk)[0]
 
-        Part.export(objs, filename_base + '.step')
-        if save_FCStd:
-            doc.saveAs(filename_base + '.FCStd')
-
-        periodicity = [('all', 0),
-                       ([1, 0, 0], cell_size[0]),
-                       ([0, 1, 0], cell_size[1]),
-                       ([0, 0, 1], cell_size[2])]
-        # periodicity = []
-
-        if len(attrs) == 0:
-            attrs = 'const'
+        with open(filename_base + '.geo', 'wt') as f:
+            f.write('\n'.join(geo_content))
 
         if not centered:
             shift = nm.asarray(cell_size) * 0.5
 
-        gmsh_call(filename_base, filename_base + '.vtk', attrs, element_size,
-                  periodicity=periodicity, merge=True,
-                  physical_volumes=physical_volumes, shift=shift, scale=eps)
-
+        gmsh_call(filename_base, shift=shift, scale=eps)
 
 class BaseComponent(object):
     """The base component of the unit cell."""
@@ -261,15 +282,6 @@ class BaseComponent(object):
         else:
             return(self.params[key])
 
-    @staticmethod
-    def create_box(cont, size):
-        size = nm.asarray(size)
-        box = cont.addObject("Part::Box", "box")
-        box.Length, box.Width, box.Height = size
-        box.Placement = Base.Placement(Base.Vector(*(-size * 0.5)),
-                                       Base.Rotation(0, 0, 0))
-
-        return box
 
 
 class BaseCell(BaseComponent):
@@ -283,8 +295,11 @@ class BaseCell(BaseComponent):
             'el_size': el_size,
         })
 
-    def __call__(self, cont, size):
-        return self.create_box(cont, size), None
+    def __call__(self, vid, size):
+        size = nm.asarray(size)
+        pars = list(-0.5 * size) + list(size)
+
+        return geo_obj('Box', pars) % vid, None
 
 
 class BaseEmbeddedComponent(BaseComponent):
@@ -294,8 +309,7 @@ class BaseEmbeddedComponent(BaseComponent):
                      'y': nm.array([0, 1, 0]),
                      'z': nm.array([0, 0, 1])}
 
-    def __init__(self, parameters, central_point, direction,
-                 es_dmin, es_dmax, es_in, mat_id):
+    def __init__(self, parameters, central_point, direction, el_size, mat_id):
         """Init parameters of the channel component.
     
         Parameters
@@ -306,12 +320,8 @@ class BaseEmbeddedComponent(BaseComponent):
             The coordinates of the object center: [x, y, z].
         direction: str or array
             The object direction. If string: direction = 'x', 'y' or 'z'.
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """    
         super(BaseEmbeddedComponent, self).__init__(mat_id=mat_id)
 
@@ -322,9 +332,7 @@ class BaseEmbeddedComponent(BaseComponent):
             'parameters': parameters,
             'direction': direction,
             'central_point': nm.asarray(central_point, dtype=nm.float64),
-            'es_dmin': es_dmin,
-            'es_dmax': es_dmax,
-            'es_in': es_in,
+            'el_size': el_size,
         })
 
     def deactivate(self):
@@ -340,7 +348,7 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
     parameters_dict = {'radius': 0}
     
     def __init__(self, radius=(0.1, 0.1, 0.1), central_point=(0, 0, 0),
-                 direction=(1, 0, 0), es_dmin=1.1, es_dmax=1.3, es_in=0.5, mat_id=2):
+                 direction=(1, 0, 0), el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -351,69 +359,38 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
             The coordinates of the center: [x, y, z].
         direction: array
             The directional vector.
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
         super(EllipsoidalInclusion, self).__init__(parameters=[radius],
                                                    central_point=central_point,
                                                    direction=direction,
-                                                   es_dmin=es_dmin,
-                                                   es_dmax=es_dmax,
-                                                   es_in=es_in,
+                                                   el_size=el_size,
                                                    mat_id=mat_id)
 
-    def __call__(self, cont, size):
-        r = self.get('radius')
-        d = self.get('direction')
-        p = self.get('central_point')
-        label = '%s_%d' % (self.name, self.get('mat_id'))
+    def __call__(self, vid, size):
+        if nm.all(self.get('radius') > 0):
+            p = list(self.get('central_point'))
+            r = list(self.get('radius'))
+            d = self.get('direction')
+            e = nm.eye(3)[0]
+            geo = geo_obj('Sphere', p + [1.]) % vid
+            geo += ' Dilate {{%s}, {%s}} {Volume{%d};}' % (l2s(p), l2s(r), vid)
+            ax = nm.cross(e, d)
+            if nm.linalg.norm(ax) > 0.0:
+                phi = nm.arccos(nm.dot(e, d) / (nm.linalg.norm(e) * nm.linalg.norm(d)))
+                geo += ' Rotate {{%s}, {%s}, %e} {Volume{%d};}'\
+                    % (l2s(ax), l2s(p), phi, vid)
 
-        attrs = []
+            return geo, self.get('el_size')
 
-        if nm.any(r == 0):
-            return None, None
-
-        ell = cont.addObject('Part::Ellipsoid', label)
-        if isinstance(r, (int, float)):
-            ell.Radius1 = ell.Radius2 = ell.Radius3 = r
-            rmax = r
-        else:
-            ell.Radius1 = r[2]
-            ell.Radius2 = r[0]
-            ell.Radius3 = r[1]
-            rmax = nm.max(r)
-
-        ell.Angle1 = -90
-        ell.Angle2 = 90
-        ell.Angle3 = 360
-
-        ell.Placement = Base.Placement(Base.Vector(*p), Base.Rotation())
-
-        s = nm.cross([1, 0, 0], d)
-        if nm.linalg.norm(s) > 1e-12:
-            phi = nm.rad2deg(nm.arccos(nm.dot([1, 0, 0], d)))
-            rot = Base.Rotation(Base.Vector(*s), phi)
-            ell.Placement = Base.Placement(Base.Vector(), rot,\
-                Base.Vector(*p)).multiply(ell.Placement)
-
-        attrs = [('sphere', p, rmax * self.get('es_dmin'),
-                 rmax * self.get('es_dmax'), self.get('es_in'))]
-
-        return ell, attrs
-
-
-# class SphericalInclusion(BaseEmbeddedComponent):
-class SphericalInclusion(EllipsoidalInclusion):
+class SphericalInclusion(BaseEmbeddedComponent):
     """The spherical inclusion."""
     name = 'Spherical Inclusion'
     parameters_dict = {'radius': 0}
 
     def __init__(self, radius=0.1, central_point=(0, 0, 0),
-                 es_dmin=1.1, es_dmax=1.3, es_in=0.5, mat_id=2):
+                 el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -422,50 +399,19 @@ class SphericalInclusion(EllipsoidalInclusion):
             The radius of the sphere.
         central_point: array
             The coordinates of the center: [x, y, z].
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        # super(SphericalInclusion, self).__init__(parameters=[radius],
-        super(SphericalInclusion, self).__init__(radius=radius,
+        super(SphericalInclusion, self).__init__(parameters=[radius],
                                                  central_point=central_point,
-                                                #  direction=None,
-                                                #  direction=(1, 0.7, 0.5), # magic hack
-                                                 direction=(1, 0, 0),
-                                                 es_dmin=es_dmin,
-                                                 es_dmax=es_dmax,
-                                                 es_in=es_in,
+                                                 direction=None,
+                                                 el_size=el_size,
                                                  mat_id=mat_id)
 
-    # def __call__(self, cont, size):
-    #     r = self.get('radius')
-    #     p = self.get('central_point')
-    #     label = '%s_%d' % (self.name, self.get('mat_id'))
-
-    #     attrs = []
-
-    #     if r == 0:
-    #         return None, None
-
-    #     ell = cont.addObject('Part::Sphere', label)
-    #     ell.Radius = r
-    #     ell.Placement = Base.Placement(Base.Vector(*p), Base.Rotation())
-
-    #     d = self.get('direction')
-    #     s = nm.cross([1, 0, 0], d)
-    #     if nm.linalg.norm(s) > 1e-12:
-    #         phi = nm.rad2deg(nm.arccos(nm.dot([1, 0, 0], d)))
-    #         rot = Base.Rotation(Base.Vector(*s), phi)
-    #         ell.Placement = Base.Placement(Base.Vector(), rot,\
-    #             Base.Vector(*p)).multiply(ell.Placement)
-
-    #     attrs = [('sphere', p, r * self.get('es_dmin'),
-    #              r * self.get('es_dmax'), self.get('es_in'))]
-
-    #     return ell, attrs
+    def __call__(self, vid, size):
+        if self.get('radius') > 0:
+            pars = list(self.get('central_point')) + [self.get('radius')]
+            return geo_obj('Sphere', pars) % vid, self.get('el_size')
 
 class CylindricalInclusion(BaseEmbeddedComponent):
     """The cylindrical inclusion."""
@@ -473,8 +419,7 @@ class CylindricalInclusion(BaseEmbeddedComponent):
     parameters_dict = {'radius': 0, 'length': 1}
 
     def __init__(self, radius=0.1, length=0.5, central_point=(0, 0, 0),
-                 direction=(1, 0, 0), es_dmin=1.1, es_dmax=1.3, es_in=0.5,
-                 mat_id=2):
+                 direction=(1, 0, 0), el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -487,64 +432,35 @@ class CylindricalInclusion(BaseEmbeddedComponent):
             The coordinates of the center: [x, y, z].
         direction: array
             The directional vector.
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
         super(CylindricalInclusion, self).__init__(parameters=[radius, length],
                                                    central_point=central_point,
                                                    direction=direction,
-                                                   es_dmin=es_dmin,
-                                                   es_dmax=es_dmax,
-                                                   es_in=es_in,
+                                                   el_size=el_size,
                                                    mat_id=mat_id)
 
-    def __call__(self, cont, size):
+    def __call__(self, vid, size):
         r = self.get('radius')
         h = self.get('length')
         d = self.get('direction')
         p = self.get('central_point')
-        attr_ext = 1.
-        label = '%s_%d' % (self.name, self.get('mat_id'))
 
-        attrs = []
+        if nm.all(r > 0):
 
-        if nm.any(self.get('radius') == 0):
-            return None, None
+            if isinstance(d, str) or isinstance(d, unicode):
+                idir = {'x': 0, 'y': 1, 'z': 2}[d]
+                d = self.direction_tab[d]
+                if h is None:
+                    h = size[idir]
+                    p = p.copy()
+                    p[idir] = 0
 
-        if isinstance(d, str) or isinstance(d, unicode):
-            idir = {'x': 0, 'y': 1, 'z': 2}[d]
-            d = self.direction_tab[d]
-            if h is None:
-                h = size[idir]
-                p = p.copy()
-                p[idir] = 0
-                attr_ext = 1.2
+            p0 = p - 0.5 * d * h
+            pars = list(p0) + list(d * h) + [r]
 
-        cyl = cont.addObject('Part::Cylinder', label)
-        cyl.Radius = r
-        cyl.Height = h
-
-        p0 = p - 0.5 * h * nm.array([0, 0, 1])
-        cyl.Placement = Base.Placement(Base.Vector(*p0), Base.Rotation())
-
-        s = nm.cross([0, 0, 1], d)
-        if nm.linalg.norm(s) > 1e-12:
-            phi = nm.rad2deg(nm.arccos(nm.dot([0, 0, 1], d)))
-            rot = Base.Rotation(Base.Vector(*s), phi)
-            cyl.Placement = Base.Placement(Base.Vector(0, 0, 0), rot,\
-                Base.Vector(*p)).multiply(cyl.Placement)
-
-        p1 = p - 0.5 * d * h * attr_ext
-        p2 = p + 0.5 * d * h * attr_ext
-
-        attrs = [('line', [p1, p2], r * self.get('es_dmin'),
-                  r * self.get('es_dmax'), self.get('es_in'))]
-
-        return cyl, attrs
+            return geo_obj('Cylinder', pars) % vid, self.get('el_size')
 
 
 class CylindricalChannel(CylindricalInclusion):
@@ -552,7 +468,7 @@ class CylindricalChannel(CylindricalInclusion):
     name = 'Cylindrical Channel'
 
     def __init__(self, radius=0.1, central_point=(0, 0, 0), direction='x',
-                 es_dmin=1.1, es_dmax=1.3, es_in=0.5, mat_id=2):
+                 el_size=0.5, mat_id=2):
         """Init parameters of the channel component.
     
         Parameters
@@ -563,19 +479,13 @@ class CylindricalChannel(CylindricalInclusion):
             The coordinates of the cylinder center: [x, y, z].
         direction: str
             The cylinder orientation: 'x', 'y' or 'z'.
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
         super(CylindricalChannel, self).__init__(radius=radius, length=None,
                                                  central_point=central_point,
                                                  direction=direction,
-                                                 es_dmin=es_dmin,
-                                                 es_dmax=es_dmax,
-                                                 es_in=es_in,
+                                                 el_size=el_size,
                                                  mat_id=mat_id)
 
 
@@ -585,7 +495,7 @@ class BoxInclusion(BaseEmbeddedComponent):
     parameters_dict = {'size': 0}
     
     def __init__(self, size=(0.3, 0.2, 0.1), central_point=(0, 0, 0),
-                 es_dmin=1.1, es_dmax=1.3, es_in=0.5, mat_id=2):
+                 el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -594,22 +504,16 @@ class BoxInclusion(BaseEmbeddedComponent):
             The size of the box: [sx, sy, sz].
         central_point: array
             The coordinates of the center: [x, y, z].
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
         super(BoxInclusion, self).__init__(parameters=[size],
                                            central_point=central_point,
                                            direction=None,
-                                           es_dmin=es_dmin,
-                                           es_dmax=es_dmax,
-                                           es_in=es_in,
+                                           el_size=el_size,
                                            mat_id=mat_id)
 
-    def __call__(self, cont, size):
+    def __call__(self, vid, size):
         d = self.get('direction')
         if d is None:
             s = nm.array(self.get('size'))
@@ -621,24 +525,9 @@ class BoxInclusion(BaseEmbeddedComponent):
             p = nm.zeros(3, dtype=nm.float64)
             p[idir] = self.get('central_point')[idir]
 
-        label = '%s_%d' % (self.name, self.get('mat_id'))
-
-        attrs = []
-
-        if nm.any(s == 0):
-            return None, None
-
-        box = cont.addObject('Part::Box', label)
-        box.Length, box.Width, box.Height = s
-        box.Placement = Base.Placement(Base.Vector(*(p - 0.5 * s)),
-                                       Base.Rotation())
-
-        aux = s * 0.5 * self.get('es_dmin')
-        attrs = [('box', p - aux, p + aux,
-                  (self.get('es_dmax') - self.get('es_dmin')) * nm.mean(s),
-                  self.get('es_in'))]
-
-        return box, attrs
+        if nm.all(s > 0):
+            pars = list(p - 0.5 * s) + list(s)
+            return geo_obj('Box', pars) % vid, self.get('el_size')
 
 class SandwichLayer(BoxInclusion):
     """The sandwich layer."""
@@ -646,8 +535,7 @@ class SandwichLayer(BoxInclusion):
     parameters_dict = {'thickness': 0}
     
     def __init__(self, thickness=0.1, central_point=(0, 0, 0),
-                 direction='x', es_dmin=1.1, es_dmax=1.3, es_in=0.5,
-                 mat_id=2):
+                 direction='x', el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -658,18 +546,12 @@ class SandwichLayer(BoxInclusion):
             The coordinates of the center: [x, y, z].
         direction: str
             The orientation of the layer normal vector: 'x', 'y' or 'z'.
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
         super(SandwichLayer, self).__init__(size=thickness,
                                             central_point=central_point,
-                                            es_dmin=es_dmin,
-                                            es_dmax=es_dmax,
-                                            es_in=es_in,
+                                            el_size=el_size,
                                             mat_id=mat_id)
         self.params['direction'] = direction
 
@@ -678,36 +560,9 @@ class SweepedChannel(BaseEmbeddedComponent):
     """The sweeped channel."""
     name = 'Sweeped Channel'
 
-    @staticmethod
-    def get_sketch(path, label, cont,
-                   is_closed=False, path_type='polyline', plane='xy'):
-        sketch = cont.addObject('Sketcher::SketchObject', label)
-        sketch.Placement = Base.Placement(Base.Vector(0, 0, 0),
-                                          Base.Rotation(0.5, 0.5, 0.5, .5))
-
-        coinc = []
-        npts = len(path)
-        for ii in range(npts):
-            p1 = tuple(path[ii])
-            jj = ii + 1
-            if (ii + 1) >= npts:
-                if is_closed:
-                    j = 0
-                else:
-                    continue
-
-            p2 = tuple(shape[jj])
-            sketch.addGeometry(Part.Line(Vec(*p1), Vec(*p2)), False)
-            coinc.append((ii, jj))
-
-        for ii in coinc:
-            sketch.addConstraint(Sketcher.Constraint('Coincident', ii[0], 2, ii[1], 1)) 
-
-        return sketch
-
     def __init__(self, profile=[[0.1, 0], [0, 0.1], [-0.1, -0.1]],
                  path=[[0, 0], [0.3, 0.1], [1, 0]], central_point=(0, 0, 0),
-                 direction='x', es_dmin=1.1, es_dmax=1.3, es_in=0.5, mat_id=2):
+                 direction='x', es_dmin=1.1, es_dmax=1.3, el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -718,62 +573,58 @@ class SweepedChannel(BaseEmbeddedComponent):
             The coordinates of the center: [x, y, z].
         direction: array
             The directional vector.
-        es_dmin: float
-            The distance to which the "inner" element size factor is applied.
-        es_dmax: float
-            The distance from which the "outer" element size factor is applied.
-        es_in: float
-            The "inner" element size factor: in_el_size = es_in * el_size_base. 
+        el_size: float
+            The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
         super(SweepedChannel, self).__init__(parameters=(profile, path),
                                              central_point=central_point,
                                              direction=direction,
                                              es_dmin=es_dmin,
                                              es_dmax=es_dmax,
-                                             es_in=es_in,
+                                             el_size=el_size,
                                              mat_id=mat_id)
 
-    def __call__(self, cont, size):
-        profile = self.get('profile')
-        path = self.get('path')
-        d = self.get('direction')
-        p = self.get('central_point')
-        label = '%s_%d' % (self.name, self.get('mat_id'))
+    # def __call__(self, vid, size):
+    #     profile = self.get('profile')
+    #     path = self.get('path')
+    #     d = self.get('direction')
+    #     p = self.get('central_point')
+    #     label = '%s_%d' % (self.name, self.get('mat_id'))
 
-        attrs = []
+    #     attrs = []
 
-        if isinstance(d, str):
-            idir = {'x': 0, 'y': 1, 'z': 2}[d]
-            d = self.direction_tab[d]
-            h = size[idir]
-            p = p.copy()
-            p[idir] = 0
+    #     if isinstance(d, str):
+    #         idir = {'x': 0, 'y': 1, 'z': 2}[d]
+    #         d = self.direction_tab[d]
+    #         h = size[idir]
+    #         p = p.copy()
+    #         p[idir] = 0
 
-        sk_profile = self.get_sketch(profile[1], 'profile', cont,
-                                     is_closed=True, path_type=profile[0],
-                                     plane='yz')
+    #     sk_profile = self.get_sketch(profile[1], 'profile', cont,
+    #                                  is_closed=True, path_type=profile[0],
+    #                                  plane='yz')
 
-        path_pts = nm.asarray(path[1])
-        path_pts[:, 0] = (path_pts[:, 0] - 0.5) * h 
+    #     path_pts = nm.asarray(path[1])
+    #     path_pts[:, 0] = (path_pts[:, 0] - 0.5) * h
 
-        sp_path = self.get_sketch(path_pts, 'path', cont,
-                                  is_closed=True, path_type=path[0],
-                                  plane='xy')
+    #     sp_path = self.get_sketch(path_pts, 'path', cont,
+    #                               is_closed=True, path_type=path[0],
+    #                               plane='xy')
 
-        ch = cont.addObject('Part::Sweep', label)
-        ch.Sections = [sk_profile]
-        ch.Spine = (sp_path,[])
-        ch.Solid = True
-        ch.Frenet = False
+    #     ch = cont.addObject('Part::Sweep', label)
+    #     ch.Sections = [sk_profile]
+    #     ch.Spine = (sp_path,[])
+    #     ch.Solid = True
+    #     ch.Frenet = False
 
-        attr_comm = (r * self.get('es_dmin'), r * self.get('es_dmax'),
-                     self.get('es_in'))
-        p1 = p - 0.5 * d * h * 1.2
-        p2 = p - 0.5 * d * h * 1
-        for ii in range(len(path_pts)):
-            attrs = [('line', [path_pts[ii], path_pts[ii + 1]]) + attr_comm]
+    #     attr_comm = (r * self.get('es_dmin'), r * self.get('es_dmax'),
+    #                  self.get('el_size'))
+    #     p1 = p - 0.5 * d * h * 1.2
+    #     p2 = p - 0.5 * d * h * 1
+    #     for ii in range(len(path_pts)):
+    #         attrs = [('line', [path_pts[ii], path_pts[ii + 1]]) + attr_comm]
 
-        return ch, attrs
+    #     return ch, attrs
 
 pucgen_classes = [
     BaseCell,
