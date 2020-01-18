@@ -44,7 +44,7 @@ def msh_read(filename):
 
             elems = {}
             etab = {2: '2_3', 3: '2_4', 4: '3_4', 5: '3_8', 6: '3_6'}
-            for ii in elems0.iterkeys():
+            for ii in elems0.keys():
                 if ii not in etab:
                     continue
                 elems[etab[ii]] = nm.asarray(elems0[ii]) - 1, nm.asarray(mats[ii])
@@ -59,7 +59,7 @@ def msh_write(filename, nodes, elems, phys_names):
     fd.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n')
 
     fd.write('$PhysicalNames\n%d\n' % len(phys_names))
-    for k, v in phys_names.iteritems():
+    for k, v in phys_names.items():
         fd.write('%d %d "%s"\n' % (v[1], k, v[0]))
     fd.write('$EndPhysicalNames\n')
 
@@ -69,12 +69,12 @@ def msh_write(filename, nodes, elems, phys_names):
     fd.write('$EndNodes\n')
 
     nel = 0
-    for k, v in elems.iteritems():
+    for k, v in elems.items():
         nel += v[0].shape[0]
     fd.write('$Elements\n%d\n' % nel)
     iel = 1
     etab = {'2_3': 2, '2_4': 3, '3_4': 4, '3_8': 5, '3_6': 6}
-    for k, v in elems.iteritems():
+    for k, v in elems.items():
         for conn, mat in zip(v[0], v[1]):
             sconn = ' '.join([str(ii + 1) for ii in conn])
             fd.write('%d %d %d %d %d %s\n' % (iel, etab[k], 2, mat, 1, sconn))

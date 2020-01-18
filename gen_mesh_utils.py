@@ -15,7 +15,7 @@ def mirror_mesh(nodes, elems, data, c0=0, dim=0):
     mnodes = nm.vstack([nodes, nodes2])
 
     mdata = {}
-    for k, v in data.iteritems():
+    for k, v in data.items():
         if len(v[2].shape) > 1:
             mdata[k] = (v[0], v[1], nm.vstack([v[2], v[2]]))
         else:
@@ -134,7 +134,7 @@ def repeater(filename_in, filename_out, grid, size_x, tol=1e-9):
         nodes = nm.vstack(nodes + idir * ii for ii in range(igrid))
         elems = nm.vstack(elems + nnodes * ii for ii in range(igrid))
         repdata = {}
-        for k, v in data.iteritems():
+        for k, v in data.items():
             if len(v[2].shape) > 1:
                 repdata[k] = (v[0], v[1], nm.vstack([v[2]] * igrid))
             else:

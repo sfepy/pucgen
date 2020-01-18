@@ -4,9 +4,9 @@ import sys
 cell_type_table = {'2_3': 5, '2_4': 9,
                    '3_2': 3, '3_4': 10, '3_8': 12, '3_6': 13}
 cell_type_table2 =\
-    {v: int(k.split('_')[1]) for k, v in cell_type_table.iteritems()}
+    {v: int(k.split('_')[1]) for k, v in cell_type_table.items()}
 cell_type_table3 =\
-    {v: k for k, v in cell_type_table.iteritems()}
+    {v: k for k, v in cell_type_table.items()}
 
 _float_format = '0.6e'
 float_format = '{:%s}' % _float_format
@@ -64,7 +64,7 @@ def vtk_write(filename, points, cells, cell_type, data={}):
 
     npoints, dim = points.shape
     ncells = cells.shape[0]
-    datak = data.keys()
+    datak = list(data.keys())
     datak.sort()
     datac = [(k,) + data[k][1:] for k in datak if data[k][0] == 'c']
     datap = [(k,) + data[k][1:] for k in datak if data[k][0] == 'p']
@@ -182,7 +182,7 @@ def vtk_read(filename, ret_pc_data=False):
 
     if ret_pc_data:
         out = {'p': {}, 'c': {}}
-        for label, (pc, _, val) in data.iteritems():
+        for label, (pc, _, val) in data.items():
             out[pc][label] = val
         return points, cells, cell_type_table3[ctype], out['p'], out['c']
     else:

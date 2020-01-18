@@ -14,6 +14,12 @@ On Ubuntu based Linux distributions users can use the following command to insta
 
     apt install gmsh python-pyqt5 python-pyqt5.qtopengl python-vtk6
 
+or:
+
+    apt install gmsh python3-pyqt5 python3-pyqt5.qtopeng python3-vtk7
+
+for Python3.
+
 ## Installation
 
 * Download the code from the git repository:

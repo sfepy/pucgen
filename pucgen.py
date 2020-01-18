@@ -369,7 +369,7 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
                                                    mat_id=mat_id)
 
     def __call__(self, vid, size):
-        if nm.all(self.get('radius') > 0):
+        if nm.all(nm.array(self.get('radius')) > 0):
             p = list(self.get('central_point'))
             r = list(self.get('radius'))
             d = self.get('direction')
@@ -449,7 +449,7 @@ class CylindricalInclusion(BaseEmbeddedComponent):
 
         if nm.all(r > 0):
 
-            if isinstance(d, str) or isinstance(d, unicode):
+            if isinstance(d, str):
                 idir = {'x': 0, 'y': 1, 'z': 2}[d]
                 d = self.direction_tab[d]
                 if h is None:

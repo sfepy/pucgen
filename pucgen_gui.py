@@ -11,6 +11,7 @@ from optparse import OptionParser
 from inspect import getargspec
 from copy import deepcopy
 from ast import literal_eval
+from functools import reduce
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget,\
      QHBoxLayout, QVBoxLayout, QTabWidget, QLineEdit,\
@@ -477,9 +478,6 @@ class MainWindow(QMainWindow):
 
     def generate(self):
         pars, ok = check_edits({'filename_out': self.generator_out_file})
-        print self.generator_out_file.text()
-        print pars
-        print ok
 
         if ok:
             out_file = pars['filename_out']
