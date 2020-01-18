@@ -7,7 +7,6 @@ PUCGEN - GUI for Periodic Unit Cell generator
 
 import sys
 import os
-from optparse import OptionParser
 from inspect import getargspec
 from copy import deepcopy
 from ast import literal_eval
@@ -19,7 +18,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget,\
      QComboBox, QListWidget, QDialog, QDialogButtonBox
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QColor
 
-from pucgen import PUC, pucgen_classes
+from pucgen import PUC, pucgen_classes, version
 from vtk_viewer import VTKViewer
 
 params_dict = {}
@@ -427,7 +426,7 @@ class MainWindow(QMainWindow):
         font_info = QFont()
         font_info.setItalic(True)
         font_info.setPixelSize(12)
-        info = QLabel('Version: 0.1')
+        info = QLabel('Version: %s' % version)
         info.setFont(font_info)
         vbox1.addStretch(1)
         vbox1.addWidget(info)
