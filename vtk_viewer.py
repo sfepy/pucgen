@@ -4,7 +4,6 @@ import vtk
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QSpacerItem,\
     QSizePolicy, QDialog, QPushButton, QCheckBox, QSlider, QApplication
 from PyQt5.QtCore import Qt
-from vtk.util import numpy_support
 import vtk.qt
 vtk.qt.QVTKRWIBase = 'QGLWidget'
 
@@ -17,7 +16,6 @@ class VTKViewer(QDialog):
         reader = vtk.vtkUnstructuredGridReader()
         reader.SetFileName(filename)
         reader.Update()
-
 
         ca, cb = reader.GetOutput().GetCellData().GetScalars().GetRange()
         lut = vtk.vtkLookupTable()
@@ -40,9 +38,12 @@ class VTKViewer(QDialog):
         if mat_id is not None:
             cell_data = reader.GetOutput().GetCellData()
             cell_data.SetActiveScalars('mat_id')
-            mat_id_field = numpy_support.vtk_to_numpy(cell_data.GetScalars())
-
-            ids = numpy_support.numpy_to_vtk(nm.where(mat_id_field == mat_id)[0])
+            mat_id_field = cell_data.GetScalars()
+            ids = vtk.vtkIdTypeArray()
+            ids.SetNumberOfComponents(1)
+            for ii in range(mat_id_field.GetNumberOfValues()):
+                if mat_id_field.GetValue(ii) == mat_id:
+                    ids.InsertNextValue(ii)
 
             selectionNode = vtk.vtkSelectionNode()
             selectionNode.SetFieldType(0) # CELLS
