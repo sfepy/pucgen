@@ -222,9 +222,10 @@ class PUC(object):
             geo.append('Periodic Surface{per%s%d()} = {per%s%d()} Translate{%e,%e,%e};'
                 % ((per, 2, per, 1) + tuple(pdir)))
 
+        esize_min = nm.min([k for k in el_size.values() if k is not None])
         geo_content = [
             'SetFactory("OpenCASCADE");',
-            'Mesh.CharacteristicLengthMin = %e;' % (element_size * 0.01),
+            'Mesh.CharacteristicLengthMin = %e;' % element_size * esize_min,
             'Mesh.CharacteristicLengthMax = %e;' % element_size,
             ''] + geo
 
