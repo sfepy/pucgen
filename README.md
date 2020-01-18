@@ -34,15 +34,15 @@ or
 
 ## Usage
 
-* Command line:
+* Command line processing:
 
-      python pucgen.py <input_file.txt>
+      python pucgen.py <input_file>
 
-* GUI:
+* Run the GUI:
 
       python pucgen.py
 
-## Examples:
+## Input file examples:
 
 #### `example1.puc`:
 
