@@ -12,7 +12,7 @@ from inspect import getargspec
 from ast import literal_eval
 from optparse import OptionParser
 
-from gen_mesh_utils import gmsh_call, repeater
+from gen_mesh_utils import call_gmsh, repeat_cell
 
 
 def l2s(l):
@@ -238,7 +238,7 @@ class PUC(object):
         if not centered:
             shift = nm.asarray(cell_size) * 0.5
 
-        gmsh_call(filename_base, shift=shift, scale=eps)
+        call_gmsh(filename_base, shift=shift, scale=eps)
 
 class BaseComponent(object):
     """The base component of the unit cell."""
@@ -681,8 +681,8 @@ def main():
 
         if options.reps is not None:
             filename_in = args[0] if filename_ext == '.vtk' else filename_out
-            repeater(filename_in, filename_out,
-                     literal_eval(options.reps), float(options.scale))
+            repeat_cell(filename_in, filename_out,
+                        literal_eval(options.reps), float(options.scale))
 
 
 if __name__ == "__main__":

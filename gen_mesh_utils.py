@@ -71,7 +71,7 @@ def merge_nodes(nodes, elems, data=None, tol=1e-9):
     return new_nodes, remap[elems], data
 
 
-def gmsh_call(filename_base, dim=3, export_elems='3_4',
+def call_gmsh(filename_base, dim=3, export_elems='3_4',
               node_groups=None, shift=None, scale=None):
 
     def label_nodes(node_selection, nodes):
@@ -121,7 +121,7 @@ def gmsh_call(filename_base, dim=3, export_elems='3_4',
     vtk_write(filename_base + '.vtk', nodes, elems, export_elems, data)
 
 
-def repeater(filename_in, filename_out, grid, size_x, tol=1e-9):
+def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
     nodes, elems, elem_type, data = vtk_read(filename_in, ret_pc_data=False)
 
     cell_size = nm.max(nodes, axis=0) - nm.min(nodes, axis=0)

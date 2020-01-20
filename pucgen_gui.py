@@ -223,7 +223,7 @@ class MainWindow(QMainWindow):
         return vbox
 
     def repeater_generate_grid(self):
-        from gen_mesh_utils import repeater
+        from gen_mesh_utils import repeat_cell
 
         pars, ok = check_edits(self.edits_to_check)
 
@@ -233,9 +233,8 @@ class MainWindow(QMainWindow):
                 ok = ok & OverwriteBox(os.path.split(out_file)[1])
 
         if ok:
-            repeater(pars['filename_in'],
-                     out_file,
-                     pars['grid'], pars['size_x'])
+            repeat_cell(pars['filename_in'], out_file,
+                        pars['grid'], pars['size_x'])
             viewer = VTKViewer(self, out_file, mat_id=None)
             viewer.exec_()
 
