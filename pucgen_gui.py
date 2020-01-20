@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
         for cls in self.gen_classes:
             args, _, _, defaults = getargspec(cls.__init__)
 
-            clsargs = zip(args[1:], defaults)
+            clsargs = tuple(zip(args[1:], defaults))
             self.class_args[cls.__name__] = clsargs
             clslist.append(cls.__name__)
 
@@ -360,7 +360,7 @@ class MainWindow(QMainWindow):
 
     def edit_component(self):
         idx = self.listbox.currentRow()
-        cls, pars, act = self.components[idx]
+        cls, pars, _ = self.components[idx]
         clsargs = self.class_args[cls.__name__]
 
         scpars = []
