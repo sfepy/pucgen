@@ -122,6 +122,7 @@ class VTKViewer(QDialog):
             self.slider.setValue(self.slider.maximum())
             self.slider.valueChanged.connect(self.change_slider_value)
             self.vbox.addWidget(self.slider)
+            self.slider.setEnabled(False)
         self.vbox.addItem(QSpacerItem(0, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
         btn_quit = QPushButton('Quit Viewer', self)
         btn_quit.clicked.connect(self.close)
@@ -134,8 +135,10 @@ class VTKViewer(QDialog):
     def change_chbox_value(self):
         if self.chbox.isChecked():
             self.obj.SetVisibility(True)
+            self.slider.setEnabled(True)
         else:
             self.obj.SetVisibility(False)
+            self.slider.setEnabled(False)
         self.ren_win.GetInteractor().Render()
 
     def change_slider_value(self):
