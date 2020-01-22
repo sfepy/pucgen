@@ -126,24 +126,25 @@ def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
 
     cell_size = nm.max(nodes, axis=0) - nm.min(nodes, axis=0)
 
-    for idim, igrid in enumerate(grid):
-        if igrid <= 0:
-            raise ValueError('Incorrect numer of repetition! (%s)' % grid)
+    if grid is not None:
+        for idim, igrid in enumerate(grid):
+            if igrid <= 0:
+                raise ValueError('Incorrect numer of repetition! (%s)' % grid)
 
-        nnodes = nodes.shape[0]
-        idir = nm.eye(3)[idim] * cell_size
+            nnodes = nodes.shape[0]
+            idir = nm.eye(3)[idim] * cell_size
 
-        nodes = nm.vstack(nodes + idir * ii for ii in range(igrid))
-        elems = nm.vstack(elems + nnodes * ii for ii in range(igrid))
-        repdata = {}
-        for k, v in data.items():
-            if len(v[2].shape) > 1:
-                repdata[k] = (v[0], v[1], nm.vstack([v[2]] * igrid))
-            else:
-                repdata[k] = (v[0], v[1], nm.hstack([v[2]] * igrid))
+            nodes = nm.vstack(nodes + idir * ii for ii in range(igrid))
+            elems = nm.vstack(elems + nnodes * ii for ii in range(igrid))
+            repdata = {}
+            for k, v in data.items():
+                if len(v[2].shape) > 1:
+                    repdata[k] = (v[0], v[1], nm.vstack([v[2]] * igrid))
+                else:
+                    repdata[k] = (v[0], v[1], nm.hstack([v[2]] * igrid))
 
-        nodes, elems, data = merge_nodes(nodes, elems, repdata, tol=tol)
+            nodes, elems, data = merge_nodes(nodes, elems, repdata, tol=tol)
 
-    scale = float(size_x) / nm.max(nodes[:, 0])
+    scale = float(size_x) / nm.max(nodes[:, 0]) if size_x is not None else 1.0
 
     vtk_write(filename_out, nodes * scale, elems, elem_type, data)

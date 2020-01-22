@@ -646,7 +646,7 @@ usage = 'Usage: %prog [[options] filename_in]'
 version = '0.1'
 helps = {
     'reps': 'construct grid by repeating unit cell, number of repetition defined by NX, NY, NZ',
-    'scale': 'scale unit cell by SCALE factor, if `--tile` or `-t` employed, SCALE is grid size in x-direction',
+    'sizex': 'scale geometry uniformly such that its size in x-direction is SIZE_X',
     'filename_out': 'write VTK output to FILE',
 }
 
@@ -655,9 +655,9 @@ def main():
     parser.add_option('-t', '--tile', metavar='"NX,NY,NZ"',
                       action='store', dest='reps', default=None,
                       help=helps['reps'])
-    parser.add_option('-s', '--scale', metavar='SCALE',
-                      action='store', dest='scale', default=1.0,
-                      help=helps['scale'])
+    parser.add_option('-s', '--sizex', metavar='SIZE_X',
+                      action='store', dest='size_x', default=None,
+                      help=helps['sizex'])
     parser.add_option('-o', '--output', metavar='FILE',
                       action='store', dest='filename_out', default=None,
                       help=helps['filename_out'])
@@ -683,10 +683,13 @@ def main():
             puc = PUC.from_file(args[0])
             puc(filename_out, eps=float(options.scale))
 
-        if options.reps is not None:
+        if options.reps is not None or options.scale is not None:
             filename_in = args[0] if filename_ext == '.vtk' else filename_out
-            repeat_cell(filename_in, filename_out,
-                        literal_eval(options.reps), float(options.scale))
+            reps = literal_eval(options.reps)\
+                if options.reps is not None else None
+            size_x = float(options.size_x)\
+                if options.size_x is not None else None
+            repeat_cell(filename_in, filename_out, reps, size_x)
 
 
 if __name__ == "__main__":
