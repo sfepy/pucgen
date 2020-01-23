@@ -646,7 +646,7 @@ usage = 'Usage: %prog [[options] filename_in]'
 version = '0.1'
 helps = {
     'reps': 'construct grid by repeating unit cell, number of repetition defined by NX, NY, NZ',
-    'sizex': 'scale geometry uniformly such that its size in x-direction is SIZE_X',
+    'sizex': 'resize geometry uniformly such that its size in x-direction is SIZE_X',
     'filename_out': 'write VTK output to FILE',
 }
 
