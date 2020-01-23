@@ -24,13 +24,13 @@ for Python3.
 
 * Download the code from the git repository:
 
-      git clone git://github.com/vlukes/mumpspy
+      git clone git://github.com/sfepy/pucgen
 
 or
 
 * Use [pip](https://pypi.org/project/pip/):
 
-      pip install git+git://github.com/vlukes/mumpspy
+      pip install git+git://github.com/sfepy/pucgen
 
 ## Usage
 
