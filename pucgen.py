@@ -262,23 +262,22 @@ class BaseComponent(object):
         self.params = {'mat_id': mat_id}
         self.active = True
 
-    def __call__(self, cont, size):
-        """Create the cell box.
+    def __call__(self, vid, size):
+        """Create the GEO file representation of a object.
     
         Parameters
         ----------
-        cont: FreeCAD document
-            The document to which the object is created.
+        vid: int
+            The volume indentificator.
         size: array
-            The size of the rectangular cell: [size_x, size_y, size_z].
+            The size of the cell: [size_x, size_y, size_z].
 
         Returns
         -------
-        obj: FreeCAD object
-            The created object.
-        attrs: list
-            The attractors affecting the mesh density inside and around
-            the object.
+        obj: str
+            The string encoding a GEO file object.
+        el_size: float
+            The element size factor.
         """
         pass
 
