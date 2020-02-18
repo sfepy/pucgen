@@ -24,15 +24,13 @@ def b2s_delete(b):
 def geo_obj(obj, pars):
     return '%s(%%d) = {%s};' % (obj, l2s(pars))
 
-def volumes_union(l1, l2, el_size, delete1=True, delete2=True):
-    esize = nm.min([el_size[k] for k in l1 + l2])
-    return "BooleanUnion(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
-        % (l2s(l1), b2s_delete(delete1), l2s(l2), b2s_delete(delete2)), esize
 
-def volumes_difference(l1, l2, el_size, delete1=True, delete2=True):
-    esize = nm.min([el_size[k] for k in l1])
-    return "BooleanDifference(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
-        % (l2s(l1), b2s_delete(delete1), l2s(l2), b2s_delete(delete2),), esize
+def volumes_boolean(l1, l2, operation, el_size, delete1=True, delete2=True):
+    esize = nm.min([el_size[k] for k in l1 + l2 if el_size[k] is not None])
+    return "Boolean%s(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
+        % (operation, l2s(l1), b2s_delete(delete1), l2s(l2),
+           b2s_delete(delete2)), esize
+
 
 class PUC(object):
     """Periodic Unit Cell object."""
@@ -157,7 +155,8 @@ class PUC(object):
         if len(bcell) == 2:
             bcell_ctool = bcell[1]
         elif len(bcell) >= 3:
-            geo_line, esize = volumes_union([bcell[1]], bcell[2:], el_size)
+            geo_line, esize = volumes_boolean([bcell[1]], bcell[2:],
+                                              'Union', el_size)
             geo.append(geo_line % vid)
             el_size[vid] = esize
             bcell_ctool = vid
@@ -168,10 +167,19 @@ class PUC(object):
         objs = [bcell[0]]
         for mat_id in mat_ids[1:]:
             if len(volumes[mat_id]) >= 2:
-                geo_line, esize = volumes_union([volumes[mat_id][0]],
-                                                 volumes[mat_id][1:], el_size)
+                geo_line, esize = volumes_boolean([volumes[mat_id][0]],
+                                                  volumes[mat_id][1:],
+                                                  'Union', el_size)
                 geo.append(geo_line % vid)
                 el_size[vid] = esize
+                uni = vid
+                vid += 1
+                geo_line, esize = volumes_boolean([uni], [bcell[0]],
+                                                  'Intersection', el_size,
+                                                  delete2=False)
+                geo.append(geo_line % vid)
+                el_size[vid] = esize
+                objs.append(vid)
                 uni = vid
                 vid += 1
             else:
@@ -180,16 +188,17 @@ class PUC(object):
             if bcell_ctool is None:
                 objs.append(uni)
             else:
-                geo_line, esize = volumes_difference([uni], [bcell_ctool],
-                                                     el_size)
+                geo_line, esize = volumes_boolean([uni], [bcell_ctool],
+                                                  'Difference', el_size)
                 geo.append(geo_line % vid)
                 el_size[vid] = esize
                 objs.append(vid)
                 vid += 1
 
         if len(objs) > 1:
-            geo_line, esize = volumes_difference([objs[0]], objs[1:],
-                                                 el_size, delete2=False)
+            geo_line, esize = volumes_boolean([objs[0]], objs[1:],
+                                              'Difference', el_size,
+                                              delete2=False)
             geo.append(geo_line % vid)
             el_size[vid] = esize
             objs[0] = vid
