@@ -673,6 +673,8 @@ def main():
     else:
         filename_base, filename_ext = os.path.splitext(args[0])
 
+        size_x = float(options.size_x) if options.size_x is not None else None
+
         if options.filename_out is not None:
             filename_out = options.filename_out
         else:
@@ -680,14 +682,12 @@ def main():
 
         if filename_ext == '.puc': # run generator
             puc = PUC.from_file(args[0])
-            puc(filename_out, eps=float(options.scale))
+            puc(filename_out, eps=size_x)
 
-        if options.reps is not None or options.scale is not None:
+        if options.reps is not None or size_x is not None:
             filename_in = args[0] if filename_ext == '.vtk' else filename_out
             reps = literal_eval(options.reps)\
                 if options.reps is not None else None
-            size_x = float(options.size_x)\
-                if options.size_x is not None else None
             repeat_cell(filename_in, filename_out, reps, size_x)
 
 
