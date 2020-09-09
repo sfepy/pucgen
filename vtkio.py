@@ -12,9 +12,10 @@ _float_format = '0.6e'
 float_format = '{:%s}' % _float_format
 int_format = '{:d}'
 
-dtype_table = {'float': nm.float64, 'double': nm.float64, 'int': nm.int32}
+dtype_table = {'float': nm.float64, 'double': nm.float64, 'int': nm.int32,
+               'long': nm.int64}
 dtype_str_table = {'float': float_format, 'double': float_format,
-                   'int': int_format}
+                   'int': int_format, 'long': int_format}
 
 vtk_head = """# vtk DataFile Version 2.6
 output file
