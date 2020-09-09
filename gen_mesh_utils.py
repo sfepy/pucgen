@@ -134,8 +134,8 @@ def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
             nnodes = nodes.shape[0]
             idir = nm.eye(3)[idim] * cell_size
 
-            nodes = nm.vstack(nodes + idir * ii for ii in range(igrid))
-            elems = nm.vstack(elems + nnodes * ii for ii in range(igrid))
+            nodes = nm.vstack([nodes + idir * ii for ii in range(igrid)])
+            elems = nm.vstack([elems + nnodes * ii for ii in range(igrid)])
             repdata = {}
             for k, v in data.items():
                 if len(v[2].shape) > 1:
