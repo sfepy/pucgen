@@ -1,9 +1,10 @@
 import sys
 import numpy as nm
 import vtk
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QSpacerItem,\
+from PyQt5.QtWidgets import QVBoxLayout, QSpacerItem, QFrame,\
     QSizePolicy, QDialog, QPushButton, QCheckBox, QSlider, QApplication
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
+
 import vtk.qt
 vtk.qt.QVTKRWIBase = 'QGLWidget'
 
@@ -17,13 +18,22 @@ class VTKViewer(QDialog):
         reader.SetFileName(filename)
         reader.Update()
 
-        ca, cb = reader.GetOutput().GetCellData().GetScalars().GetRange()
+        cell_data = reader.GetOutput().GetCellData()
+        array_names = [cell_data.GetArrayName(k)
+            for k in range(cell_data.GetNumberOfArrays())]
+        if len(array_names) >= 1:
+            ca, cb = cell_data.GetArray(0).GetRange()
+        else:
+            ca, cb = 1, 1
         lut = vtk.vtkLookupTable()
-        # lut.SetHueRange(0.667, 0)
         lut.SetAlphaRange(1, 1)
         lut.SetTableRange(ca, cb)
         mapper = vtk.vtkDataSetMapper()
-        mapper.SetScalarModeToUseCellData()
+        mapper.SetScalarModeToUseCellFieldData()
+        mapper.SetColorModeToMapScalars()
+        mapper.ScalarVisibilityOn()
+        if len(array_names) >= 1:
+            mapper.SelectColorArray(array_names[0])
         mapper.SetLookupTable(lut)
         mapper.SetScalarRange(ca,cb)
         actor = vtk.vtkActor()
@@ -36,9 +46,7 @@ class VTKViewer(QDialog):
         renderer.AddActor(actor)
 
         if mat_id is not None:
-            cell_data = reader.GetOutput().GetCellData()
-            cell_data.SetActiveScalars('mat_id')
-            mat_id_field = cell_data.GetScalars()
+            mat_id_field = cell_data.GetArray(0)
             ids = vtk.vtkIdTypeArray()
             ids.SetNumberOfComponents(1)
             for ii in range(mat_id_field.GetNumberOfValues()):
@@ -103,34 +111,42 @@ class VTKViewer(QDialog):
 
         self.setWindowTitle('VTKViewer: %s' % filename)
 
-        self.vbox = QVBoxLayout()
-        vtkWidget = QVTKRenderWindowInteractor()
+        vbox = QVBoxLayout()
+        frame = QFrame()
+        vbox.addWidget(frame)
+
+        vtkWidget = QVTKRenderWindowInteractor(frame)
+        vbox.addWidget(vtkWidget)
+
+        ren, self.obj = self.view_vtk(filename, mat_id=mat_id)
+
+        ren_win = vtkWidget.GetRenderWindow()
+        ren_win.AddRenderer(ren)
+        self.iren = ren_win.GetInteractor()
         vtkWidget.Initialize()
         vtkWidget.Start()
-        ren, self.obj = self.view_vtk(filename, mat_id=mat_id)
-        self.ren_win = vtkWidget.GetRenderWindow()
-        self.ren_win.AddRenderer(ren)
-        self.vbox.addWidget(vtkWidget)
+
         if self.obj is not None:
             self.chbox = QCheckBox('matrix visibility')
             self.chbox.setChecked(False)
             self.chbox.stateChanged.connect(self.change_chbox_value)
-            self.vbox.addWidget(self.chbox)
+            vbox.addWidget(self.chbox)
             self.slider = QSlider(Qt.Horizontal)
             # self.slider.setMinimum(0)
             # self.slider.setMaximum(1)
             self.slider.setValue(self.slider.maximum())
             self.slider.valueChanged.connect(self.change_slider_value)
-            self.vbox.addWidget(self.slider)
+            vbox.addWidget(self.slider)
             self.slider.setEnabled(False)
-        self.vbox.addItem(QSpacerItem(0, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
+        vbox.addItem(QSpacerItem(0, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
         btn_quit = QPushButton('Quit Viewer', self)
         btn_quit.clicked.connect(self.close)
-        self.vbox.addWidget(btn_quit)
-        self.setLayout(self.vbox)
+
+        vbox.addWidget(btn_quit)
+        self.setLayout(vbox)
 
         self.toshot = self
-        vtkWidget.show()
 
     def change_chbox_value(self):
         if self.chbox.isChecked():
@@ -139,20 +155,19 @@ class VTKViewer(QDialog):
         else:
             self.obj.SetVisibility(False)
             self.slider.setEnabled(False)
-        self.ren_win.GetInteractor().Render()
+        self.iren.Render()
 
     def change_slider_value(self):
         val = (self.slider.value() - self.slider.minimum())\
             / float(self.slider.maximum())
         self.obj.GetProperty().SetOpacity(val)
-        self.ren_win.GetInteractor().Render()
+        self.iren.Render()
 
 
 def main():
     if len(sys.argv) > 1:
         app = QApplication(sys.argv)
-        viewer = VTKViewer(None, sys.argv[1], mat_id=1)
-        # viewer = VTKViewer(None, sys.argv[1], mat_id=None)
+        viewer = VTKViewer(None, sys.argv[1], mat_id=None)
         viewer.show()
         sys.exit(app.exec_())
     else:
