@@ -179,7 +179,6 @@ class PUC(object):
                                                   delete2=False)
                 geo.append(geo_line % vid)
                 el_size[vid] = esize
-                objs.append(vid)
                 uni = vid
                 vid += 1
             else:
