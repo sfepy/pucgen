@@ -129,7 +129,7 @@ def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
     if grid is not None:
         for idim, igrid in enumerate(grid):
             if igrid <= 0:
-                raise ValueError('Incorrect numer of repetition! (%s)' % grid)
+                raise ValueError('Incorrect number of repetition! (%s)' % grid)
 
             nnodes = nodes.shape[0]
             idir = nm.eye(3)[idim] * cell_size
