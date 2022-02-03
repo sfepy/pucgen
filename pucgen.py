@@ -183,6 +183,13 @@ class PUC(object):
                 vid += 1
             else:
                 uni = volumes[mat_id][0]
+                geo_line, esize = volumes_boolean([uni], [bcell[0]],
+                                                  'Intersection', el_size,
+                                                  delete2=False)
+                geo.append(geo_line % vid)
+                el_size[vid] = esize
+                uni = vid
+                vid += 1
 
             if bcell_ctool is None:
                 objs.append(uni)
