@@ -1,33 +1,43 @@
 import os
 import sys
 import numpy as nm
+from scipy.spatial import cKDTree
+import meshio
 
-from mshio import msh_read
-from vtkio import vtk_read, vtk_write
+# def mirror_mesh(nodes, elems, data, c0=0, dim=0):
+#     remap_tetra = nm.array([0, 2, 1, 3])
+#     nnodes = nodes.shape[0]
+#     melems = nm.vstack([elems, (elems + nnodes)[:, remap_tetra]])
+#     nodes2 = nodes.copy()
+#     nodes2[:, dim] = 2 * c0 - nodes2[:, dim]
+#     mnodes = nm.vstack([nodes, nodes2])
 
+#     mdata = {}
+#     for k, v in data.items():
+#         if len(v[2].shape) > 1:
+#             mdata[k] = (v[0], v[1], nm.vstack([v[2], v[2]]))
+#         else:
+#             mdata[k] = (v[0], v[1], nm.hstack([v[2], v[2]]))
 
-def mirror_mesh(nodes, elems, data, c0=0, dim=0):
-    remap_tetra = nm.array([0, 2, 1, 3])
-    nnodes = nodes.shape[0]
-    melems = nm.vstack([elems, (elems + nnodes)[:, remap_tetra]])
-    nodes2 = nodes.copy()
-    nodes2[:, dim] = 2 * c0 - nodes2[:, dim]
-    mnodes = nm.vstack([nodes, nodes2])
+#     return mnodes, melems, mdata
 
-    mdata = {}
-    for k, v in data.items():
-        if len(v[2].shape) > 1:
-            mdata[k] = (v[0], v[1], nm.vstack([v[2], v[2]]))
-        else:
-            mdata[k] = (v[0], v[1], nm.hstack([v[2], v[2]]))
+def find_master_slave_nodes(coors, tol=1e-9):
+    """
+    Find matching coordinates using cKDTree.
 
-    return mnodes, melems, mdata
+    Parameters
+    ----------
+    coors: numpy.ndarray
+        Nodal coordinates
+    tol: float
+        Tolerance, coordinates A and B match when |A - B| <= tol
 
-
-def find_master_slave(nodes, tol=1e-9):
-    from scipy.spatial import cKDTree
-
-    tr = cKDTree(nodes)
+    Returns
+    -------
+    out: numpy.ndarray
+        Pairs of matching coordinates
+    """
+    tr = cKDTree(coors)
     mtx = tr.sparse_distance_matrix(tr, tol).tocsr()
     nrow = nm.diff(mtx.indptr)
     idxs = nm.where(nrow > 1)[0]
@@ -42,7 +52,7 @@ def find_master_slave(nodes, tol=1e-9):
         if cols[cols < ii].shape[0] == 0:
             nc = cols.shape[0]
             if nc == 2:
-                out[idx0,:] = cols
+                out[idx0, :] = cols
                 idx0 += 1
             else:
                 idx1 = idx0 + nc - 1
@@ -53,77 +63,120 @@ def find_master_slave(nodes, tol=1e-9):
     return out[:idx0, :]
 
 
-def merge_nodes(nodes, elems, data=None, tol=1e-9):
-    ms_tab = find_master_slave(nodes, tol=tol)
-    remap = nm.ones((nodes.shape[0],), dtype=nm.int32)
+def merge_nodes(mesh, tol=1e-9):
+    """
+    Merge mesh nodes.
+
+    Parameters
+    ----------
+    mesh: meshio.Mesh
+        FE mesh
+    tol: float
+        Tolerance, nodes A and B are merged if |A - B| <= tol
+    """
+    if '_not_merge' in mesh.point_data:
+        idxs = nm.where(nm.logical_not(mesh.point_data['_not_merge']))[0]
+        ms_tab = find_master_slave_nodes(mesh.points[idxs], tol=tol)
+        ms_tab = idxs[ms_tab]
+    else:
+        ms_tab = find_master_slave_nodes(mesh.points, tol=tol)
+
+    remap = nm.ones((mesh.points.shape[0],), dtype=nm.int64)
     remap[ms_tab[:, 1]] = -1
     ndidxs = nm.where(remap > 0)[0]
     remap[ndidxs] = nm.arange(len(ndidxs))
-    new_nodes = nodes[ndidxs, :]
+    mesh.points = mesh.points[ndidxs, :]
     remap[ms_tab[:, 1]] = remap[ms_tab[:, 0]]
 
-    if data is not None:
-        for k in data.keys():
-            v = data[k]
-            if v[0] == 'p':
-                data[k] = ('p', v[1], v[2][ndidxs, ...])
+    pdata = mesh.point_data
+    if pdata is not None:
+        for k in pdata.keys():
+            pdata[k] = pdata[k][ndidxs, ...]
 
-    return new_nodes, remap[elems], data
+    for cg in mesh.cells:
+        cg.data = remap[cg.data]
 
 
-def call_gmsh(filename_base, dim=3, export_elems='3_4',
+def merge_cell_groups(mesh):
+    """
+    Merge multiple cell groups into the one.
+    """
+    cells = mesh.cells
+    cdata = mesh.cell_data
+
+    ctypes = list({cg.type for cg in cells})
+    gcells = {ct: [cg for cg in cells if cg.type == ct] for ct in ctypes}
+    ncells = [meshio.CellBlock(k, nm.vstack([c.data for c in v]))
+              for k, v in gcells.items()]
+
+    gcidxs = {ct: [k for k, cg in enumerate(cells) if cg.type == ct]
+              for ct in ctypes}
+
+    ncdata = {k: [nm.hstack([v[idx] for idx in gcidxs[ct]]) for ct in ctypes]
+              for k, v in cdata.items()}
+
+    mesh.cells = ncells
+    mesh.cell_data = ncdata
+
+
+def meshio_read(filename):
+    mesh = meshio.read(filename)
+
+    for k in list(mesh.point_data.keys()):
+        if k == 'gmsh:dim_tags':
+            key = 'node_groups'
+            val = mesh.point_data[k]
+            if nm.issubdtype(val.dtype, nm.floating):
+                mesh.point_data[key] = nm.asarray(val, dtype=nm.float64)
+            else:
+                mesh.point_data[key] = nm.asarray(val, dtype=nm.int64)
+
+        del mesh.point_data[k]
+
+    mesh.cell_sets = {}
+
+    for k in list(mesh.cell_data.keys()):
+        if k == 'gmsh:physical':
+            val = []
+            for ival in mesh.cell_data[k]:
+                if nm.issubdtype(ival.dtype, nm.floating):
+                    val.append(nm.asarray(ival, dtype=nm.float64))
+                else:
+                    val.append(nm.asarray(ival, dtype=nm.int64))
+
+            mesh.cell_data['mat_id'] = val
+
+        del mesh.cell_data[k]
+
+    merge_cell_groups(mesh)
+
+    return mesh
+
+
+def call_gmsh(filename_base, dim=3, export_elems='tetra',
               node_groups=None, shift=None, scale=None):
 
-    def label_nodes(node_selection, nodes):
-        ndgrp = nm.zeros((nodes.shape[0],), dtype=nm.int32)
-        if node_selection is not None:
-            for ng, sel in node_selection:
-                aux = sel.strip().split(' ')
-                dir = {'x': 0, 'y': 1, 'z': 2}[aux[0]]
-                expr = ' '.join(aux[1:])
-                idxs = eval('nm.where(nodes[:, %d] %s)[0]' % (dir, expr))
-                ndgrp[idxs] = ng
+    os.system(f'gmsh -{dim} {filename_base}.geo -o {filename_base}.msh')
 
-        return ndgrp
-
-    os.system('gmsh -%d %s.geo -o %s.msh -format msh22'
-              % (dim, filename_base, filename_base))
-
-    nodes, elems0, _ = msh_read(filename_base + '.msh')
-    elems, mats = elems0[export_elems][0], elems0[export_elems][1]
-    ndgrp = label_nodes(node_groups, nodes)
-
-    data = {
-        'mat_id': ('c', 'int', mats),
-        'node_groups': ('p', 'int', ndgrp)
-    }
-
-    # if only_elems_by_nodes is not None:
-    #     export_elems = only_elems_by_nodes[0]
-    #     elems, mats = elems0[export_elems][0], elems0[export_elems][1]
-    #     ndgrp = label_nodes([(1, only_elems_by_nodes[1])], nodes)
-    #     aux = ndgrp[elems].sum(axis=1)
-    #     eidxs = nm.where(aux == int(export_elems[-1]))[0]
-    #     nidxs = nm.where(ndgrp == 1)[0]
-    #     data['node_groups'] = ('p', 'int', ndgrp[nidxs] * 0)
-    #     data['mat_id'] = ('c', 'int', mats[eidxs])
-    #     remap = -nm.ones((nodes.shape[0],), dtype=nm.int32)
-    #     remap[nidxs] = nm.arange(len(nidxs))
-    #     nodes = nodes[nidxs, :]
-    #     elems = remap[elems[eidxs, :]]
+    mesh = meshio_read(f'{filename_base}.msh')
 
     if shift is not None:
-        nodes += shift
+        mesh.points += shift
 
     if scale is not None:
-        nodes *= scale
+        mesh.points *= scale
 
-    vtk_write(filename_base + '.vtk', nodes, elems, export_elems, data)
+    fname = f'{filename_base}.vtk'
+    print(f'writing mesh to {fname}')
+    mesh.write(fname, binary=False)
 
 
 def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
-    nodes, elems, elem_type, data = vtk_read(filename_in, ret_pc_data=False)
+    mesh = meshio_read(filename_in)
 
+    nodes = mesh.points
+    pdata = mesh.point_data
+    cdata = mesh.cell_data
     cell_size = nm.max(nodes, axis=0) - nm.min(nodes, axis=0)
 
     if grid is not None:
@@ -134,17 +187,25 @@ def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
             nnodes = nodes.shape[0]
             idir = nm.eye(3)[idim] * cell_size
 
+            # duplicate nodes
             nodes = nm.vstack([nodes + idir * ii for ii in range(igrid)])
-            elems = nm.vstack([elems + nnodes * ii for ii in range(igrid)])
-            repdata = {}
-            for k, v in data.items():
-                if len(v[2].shape) > 1:
-                    repdata[k] = (v[0], v[1], nm.vstack([v[2]] * igrid))
-                else:
-                    repdata[k] = (v[0], v[1], nm.hstack([v[2]] * igrid))
+            # duplicate cells and cell data
+            for ig, cg in enumerate(mesh.cells):
+                cg.data = nm.vstack([cg.data + nnodes * ii
+                                     for ii in range(igrid)])
 
-            nodes, elems, data = merge_nodes(nodes, elems, repdata, tol=tol)
+                for k, v in cdata.items():
+                    v[ig] = nm.vstack([v[ig]] * igrid)
+
+            # point data
+            for k in pdata.keys():
+                pdata[k] = nm.vstack([pdata[k]] * igrid)
+
+        mesh.points = nodes
+        merge_nodes(mesh, tol=tol)
 
     scale = float(size_x) / nm.max(nodes[:, 0]) if size_x is not None else 1.0
 
-    vtk_write(filename_out, nodes * scale, elems, elem_type, data)
+    mesh.points *= scale
+
+    mesh.write(filename_out, binary=False)
