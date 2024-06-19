@@ -8,28 +8,29 @@ PUCGEN - GUI for Periodic Unit Cell generator
 import sys
 import os
 import numpy as nm
+import gmsh
+import meshio
 from inspect import getargspec
 from ast import literal_eval
 from optparse import OptionParser
-
-from gen_mesh_utils import call_gmsh, repeat_cell
-
-
-def l2s(l):
-    return str(list(l))[1:-1]
-
-def b2s_delete(b):
-    return 'Delete;' if b else ''
-
-def geo_obj(obj, pars):
-    return '%s(%%d) = {%s};' % (obj, l2s(pars))
+from gen_mesh_utils import repeat_cell
 
 
-def volumes_boolean(l1, l2, operation, el_size, delete1=True, delete2=True):
-    esize = nm.min([el_size[k] for k in l1 + l2 if el_size[k] is not None])
-    return "Boolean%s(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
-        % (operation, l2s(l1), b2s_delete(delete1), l2s(l2),
-           b2s_delete(delete2)), esize
+# def l2s(l):
+#     return str(list(l))[1:-1]
+
+# def b2s_delete(b):
+#     return 'Delete;' if b else ''
+
+# def geo_obj(obj, pars):
+#     return '%s(%%d) = {%s};' % (obj, l2s(pars))
+
+
+# def volumes_boolean(l1, l2, operation, el_size, delete1=True, delete2=True):
+#     esize = nm.min([el_size[k] for k in l1 + l2 if el_size[k] is not None])
+#     return "Boolean%s(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
+#         % (operation, l2s(l1), b2s_delete(delete1), l2s(l2),
+#            b2s_delete(delete2)), esize
 
 
 class PUC(object):
@@ -38,9 +39,21 @@ class PUC(object):
         """Init PUC"""
         if cell_mat_id is None:
             self.components = []
+
+            gmsh.initialize()
+            gmsh.logger.start()
+            gmsh.model.add('boolean')
+
+            self.model = gmsh.model
+            self.occ = gmsh.model.occ
         else:
             self.components = [BaseCell(mat_id=cell_mat_id)\
-                if base_cell is None else base_cell] 
+                               if base_cell is None else base_cell]
+
+    def finalize(self):
+        print('\n'.join(gmsh.logger.get()))
+        gmsh.logger.stop()
+        gmsh.finalize()
 
     def add(self, obj):
         """Add a new component to the list (inclusion, channel, layer)."""
@@ -49,7 +62,7 @@ class PUC(object):
     @staticmethod
     def save_puc(filename, comps):
         """Save PUC into the text file."""
-        with open(filename, 'wt') as f:
+        with open(filename, 'wt', encoding='utf-8') as f:
             for cls, pars, act in comps:
                 aflag = '' if act else '#'
                 args, _, _, _ = getargspec(cls.__init__)
@@ -61,8 +74,8 @@ class PUC(object):
                         targs.append(k + '=' + str(tuple(val)))
                     else:
                         targs.append(k + '=' + str(val))
-                f.write('%s%s;%s\n' % (aflag, cls.__name__, ';'.join(targs)))
-            
+                f.write(f'{aflag}{cls.__name__};{";".join(targs)}\n')
+
     def save(self, filename):
         self.save_puc(filename, [(c.__class__, c, c.active)
             for c in self.components])
@@ -70,11 +83,10 @@ class PUC(object):
     @staticmethod
     def load_puc(filename):
         """Load PUC from a given text file."""
-        from ast import literal_eval
 
         cls_dict = {c.__name__: c for c in pucgen_classes}
         out = []
-        with open(filename, 'rt') as f:
+        with open(filename, 'rt', encoding='utf-8') as f:
             for line in f.readlines():
                 comp = line.strip().split(';')
                 pars = {}
@@ -104,6 +116,59 @@ class PUC(object):
 
         return new
 
+    @staticmethod
+    def get_gmsh3(objs, ent=3):
+        return [(ent, k) for k in objs]
+
+    @staticmethod
+    def get_obj3(objs):
+        return [k for _, k in objs]
+
+    def fuse(self, obj1, obj2):
+        out, _ = self.occ.fuse(self.get_gmsh3(obj1), self.get_gmsh3(obj2))
+        return self.get_obj3(out)
+
+    def cut(self, obj1, obj2):
+        out, _ = self.occ.cut(self.get_gmsh3(obj1), self.get_gmsh3(obj2),
+                              removeTool=False)
+        return self.get_obj3(out)
+
+    def fragment(self, obj1, obj2):
+        _, ovv = self.occ.fragment(self.get_gmsh3(obj1), self.get_gmsh3(obj2))
+
+        out2 = [k.copy() for k in ovv]
+        for g in out2[1:]:
+            for k in g:
+                if k in out2[0]:
+                    del out2[0][out2[0].index(k)]
+
+        return [self.get_obj3(k) for k in out2]
+
+
+    def set_periodic(self, cell_size, dim, eps=1e-3):
+        bbox = nm.array([cell_size * 0, cell_size])
+        bbox -= cell_size * 0.5
+
+        eye = nm.eye(4)
+        eye[dim, 3] = 1
+
+        lnb = bbox[0] - eps
+        rft = bbox[1] + eps
+
+        rft1 = rft.copy()
+        rft1[dim] = lnb[dim] + eps
+
+        lnb2 = lnb.copy()
+        lnb2[dim] = rft[dim] - eps
+
+        pars = list(lnb) + list(rft1) + [2]
+        p1 = self.model.getEntitiesInBoundingBox(*pars)
+        pars = list(lnb2) + list(rft) + [2]
+        p2 = self.model.getEntitiesInBoundingBox(*pars)
+
+        self.model.mesh.setPeriodic(2, self.get_obj3(p2), self.get_obj3(p1),
+                                    eye.ravel())
+
     def __call__(self, filename_vtk, cell_size=None, eps=1.0, centered=False):
         """Generate the finite element mesh.
 
@@ -119,150 +184,96 @@ class PUC(object):
             If True, the PUC is centered to the origin.
         """
         if cell_size is None:
-            cell_size = self.components[0].get('size')
+            cell_size = self.components[0].get('dimension')
 
         element_size = self.components[0].get('el_size')
         cell_size = nm.asarray(cell_size, dtype=nm.float64)
 
-        geo = []
-
         mat_ids = []
-        el_size = {}
         volumes = {}
-        vid = 1
-        bcell_mat_id = self.components[0].params['mat_id']
+        esize = {}
         for comp in self.components:
             if not comp.active:
                 continue
 
             mat_id = comp.params['mat_id']
-            geo_line, esize = comp(vid, cell_size)
-            if geo_line is None:
+            obj, es = comp(self.occ, cell_size)
+            if obj is None:
                 continue
 
-            geo.append(geo_line)
-            el_size[vid] = esize
-
             if mat_id in volumes:
-                volumes[mat_id].append(vid)
+                volumes[mat_id].append(obj)
+                esize[mat_id].append(es)
             else:
-                volumes[mat_id] = [vid]
+                volumes[mat_id] = [obj]
+                esize[mat_id] = [es]
                 mat_ids.append(mat_id)
 
-            vid += 1
+        fvolumes = []
+        fesize = []
+        cut_tool = None
+        for mat_id in mat_ids:
+            vols = volumes[mat_id]
+            es = esize[mat_id]
+            if len(vols) >= 2:
+                if mat_id == mat_ids[0]:
+                    if len(vols) >= 3:
+                        cut_tool = self.fuse(vols[1:2], vols[2:])[0]
+                    else:
+                        cut_tool = vols[1]
 
-        bcell = volumes[bcell_mat_id]
-        if len(bcell) == 2:
-            bcell_ctool = bcell[1]
-        elif len(bcell) >= 3:
-            geo_line, esize = volumes_boolean([bcell[1]], bcell[2:],
-                                              'Union', el_size)
-            geo.append(geo_line % vid)
-            el_size[vid] = esize
-            bcell_ctool = vid
-            vid += 1
-        else:
-            bcell_ctool = None
-
-        objs = [bcell[0]]
-        for mat_id in mat_ids[1:]:
-            if len(volumes[mat_id]) >= 2:
-                geo_line, esize = volumes_boolean([volumes[mat_id][0]],
-                                                  volumes[mat_id][1:],
-                                                  'Union', el_size)
-                geo.append(geo_line % vid)
-                el_size[vid] = esize
-                uni = vid
-                vid += 1
-                geo_line, esize = volumes_boolean([uni], [bcell[0]],
-                                                  'Intersection', el_size,
-                                                  delete2=False)
-                geo.append(geo_line % vid)
-                el_size[vid] = esize
-                uni = vid
-                vid += 1
+                    fvolumes.append(vols[0])
+                    fesize.append(es[0])
+                else:
+                    fvolumes.append(self.fuse(vols[:1], vols[1:])[0])
+                    fesize.append(nm.average(es))
             else:
-                uni = volumes[mat_id][0]
-                geo_line, esize = volumes_boolean([uni], [bcell[0]],
-                                                  'Intersection', el_size,
-                                                  delete2=False)
-                geo.append(geo_line % vid)
-                el_size[vid] = esize
-                uni = vid
-                vid += 1
+                fvolumes.append(vols[0])
+                fesize.append(es[0])
 
-            if bcell_ctool is None:
-                objs.append(uni)
-            else:
-                geo_line, esize = volumes_boolean([uni], [bcell_ctool],
-                                                  'Difference', el_size)
-                geo.append(geo_line % vid)
-                el_size[vid] = esize
-                objs.append(vid)
-                vid += 1
+        if cut_tool is not None:
+            fvolumes = fvolumes[:1] + [self.cut([vol], [cut_tool])[0]
+                                       for vol in fvolumes[1:]]
 
-        if len(objs) > 1:
-            geo_line, esize = volumes_boolean([objs[0]], objs[1:],
-                                              'Difference', el_size,
-                                              delete2=False)
-            geo.append(geo_line % vid)
-            el_size[vid] = esize
-            objs[0] = vid
-            vid += 1
+        out = self.fragment(fvolumes[:1], fvolumes[1:])
 
-        geo.append('Coherence;')
+        self.occ.synchronize()
 
-        geo.append('')
-        for obj, mat_id in zip(objs, mat_ids):
-            geo.append('Physical Volume(%d) = {%d};' % (mat_id, obj))
+        model = self.model
+        for objs, mat_id, es in zip(out, mat_ids, fesize):
+            model.addPhysicalGroup(3, objs, mat_id)
+            pts = model.getBoundary(self.get_gmsh3(objs), False, False, True)
+            model.mesh.setSize(pts, es)
 
-        geo.append('')
-        for obj in objs[1:]:
-            geo.append('p%d() = PointsOf{Volume{%d};};' % (obj, obj))
-            geo.append('Characteristic Length{p%d()} = %e;'
-                % (obj, element_size * el_size[obj]))
+        for d in range(3):
+            self.set_periodic(cell_size, d)
 
-        peps = nm.max(cell_size) * 1e-3
-        sib = 'Surface In BoundingBox'
-        p1 = (cell_size + peps * nm.ones(3)) * 0.5
-        p0 = -p1
-
-        geo.append('')
-        for idir, per in enumerate(['x', 'y', 'z']):
-            pdir = nm.eye(3)[idir] * cell_size
-            p2 = p1 - pdir
-            geo.append('per%s%d() = %s{%e,%e,%e,%e,%e,%e};'
-                % ((per, 1, sib) + tuple(p0) + tuple(p2)))
-            geo.append('per%s%d() = %s{%e,%e,%e,%e,%e,%e};'
-                % ((per, 2, sib) + tuple(p0 + pdir) + tuple(p2 + pdir)))
-            geo.append('Periodic Surface{per%s%d()} = {per%s%d()} Translate{%e,%e,%e};'
-                % ((per, 2, per, 1) + tuple(pdir)))
-
-        if len(el_size) > 1:
-            esize_min = nm.min([k for k in el_size.values() if k is not None])
-        else:
-            esize_min = 1
-
-        geo_content = [
-            'SetFactory("OpenCASCADE");',
-            'Mesh.CharacteristicLengthMin = %e;' % (element_size * esize_min),
-            'Mesh.CharacteristicLengthMax = %e;' % element_size,
-            ''] + geo
+        self.model.mesh.generate(3)
 
         filename_base = os.path.splitext(filename_vtk)[0]
+        fname = f'{filename_base}.msh'
+        gmsh.write(fname)
 
-        with open(filename_base + '.geo', 'wt') as f:
-            f.write('\n'.join(geo_content))
+        self.finalize()
+
+        mesh = meshio.read(fname)
 
         if not centered:
-            shift = nm.asarray(cell_size) * 0.5
+            mesh.points += nm.asarray(cell_size) * 0.5
 
-        call_gmsh(filename_base, shift=shift, scale=eps)
+        mesh.point_data = {}
+        mesh.cell_sets = {}
+        mesh.cell_data = {'mat_id': mesh.cell_data['gmsh:physical']}
+
+        fname = f'{filename_base}.vtk'
+        print(f"Writing '{fname}'...")
+        mesh.write(fname, binary=False)
+        print(f"Done writing '{fname}'")
+
 
 class BaseComponent(object):
     """The base component of the unit cell."""
     name = None
-    parameters_dict = {}
 
     def __init__(self, mat_id=1):
         """Init parameters of the component.
@@ -272,7 +283,7 @@ class BaseComponent(object):
         mat_id: int
             The component material id.
         """
-        print('new BaseComponent: %s' % self.name)
+        print(f'new BaseComponent: {self.name}')
 
         self.params = {'mat_id': mat_id}
         self.active = True
@@ -294,62 +305,53 @@ class BaseComponent(object):
         el_size: float
             The element size factor.
         """
-        pass
 
     def get(self, key):
-        if key in self.parameters_dict:
-            return(self.params['parameters'][self.parameters_dict[key]])
-        else:
-            return(self.params[key])
-
+        return self.params[key]
 
 
 class BaseCell(BaseComponent):
     """The base cell - matrix."""
     name = 'Base Cell'
 
-    def __init__(self, size=(1, 1, 1), el_size=0.1, mat_id=1):
-        super(BaseCell, self).__init__(mat_id=mat_id)
+    def __init__(self, dimension=(1, 1, 1), el_size=0.1, mat_id=1):
+        super().__init__(mat_id=mat_id)
         self.params.update({
-            'size': size,
+            'dimension': nm.asarray(dimension),
             'el_size': el_size,
         })
 
-    def __call__(self, vid, size):
-        size = nm.asarray(size)
+    def __call__(self, occ, cell_size=None):
+        size = self.get('dimension')
         pars = list(-0.5 * size) + list(size)
 
-        return geo_obj('Box', pars) % vid, None
+        return occ.addBox(*pars), self.get('el_size')
 
 
 class BaseEmbeddedComponent(BaseComponent):
     """The base for the inclusion and channel classes."""
 
-    direction_tab = {'x': nm.array([1, 0, 0]),
-                     'y': nm.array([0, 1, 0]),
-                     'z': nm.array([0, 0, 1])}
-
-    def __init__(self, parameters, central_point, direction, el_size, mat_id):
+    def __init__(self, dimension, central_point, direction, el_size, mat_id):
         """Init parameters of the channel component.
     
         Parameters
         ----------
-        parameters: float or array
-            The geometrical parameters of the object.
+        dimension: float or array
+            The dimension of the object.
         central_point: array
             The coordinates of the object center: [x, y, z].
         direction: str or array
             The object direction. If string: direction = 'x', 'y' or 'z'.
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
-        """    
-        super(BaseEmbeddedComponent, self).__init__(mat_id=mat_id)
+        """
+        super().__init__(mat_id=mat_id)
 
-        if isinstance(direction, list) or isinstance(direction, tuple):
+        if isinstance(direction, (list, tuple)):
             direction = nm.asarray(direction) / nm.linalg.norm(direction)
 
         self.params.update({
-            'parameters': parameters,
+            'dimension': dimension,
             'direction': direction,
             'central_point': nm.asarray(central_point, dtype=nm.float64),
             'el_size': el_size,
@@ -365,15 +367,14 @@ class BaseEmbeddedComponent(BaseComponent):
 class EllipsoidalInclusion(BaseEmbeddedComponent):
     """The ellipsoidal inclusion."""
     name = 'Ellipsoidal Inclusion'
-    parameters_dict = {'radius': 0}
-    
-    def __init__(self, radius=(0.1, 0.1, 0.1), central_point=(0, 0, 0),
+
+    def __init__(self, dimension=(0.1, 0.1, 0.1), central_point=(0, 0, 0),
                  direction=(1, 0, 0), el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
         ----------
-        radius: float or array
+        dimension: float or array
             The radii of the ellipsoid: r or [r1, r2, r3].
         central_point: array
             The coordinates of the center: [x, y, z].
@@ -382,72 +383,66 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        super(EllipsoidalInclusion, self).__init__(parameters=[radius],
-                                                   central_point=central_point,
-                                                   direction=direction,
-                                                   el_size=el_size,
-                                                   mat_id=mat_id)
+        super().__init__(dimension=dimension, central_point=central_point,
+                         direction=direction, el_size=el_size, mat_id=mat_id)
 
-    def __call__(self, vid, size):
-        if nm.all(nm.array(self.get('radius')) > 0):
+    def __call__(self, occ, cell_size):
+        if nm.all(nm.array(self.get('dimension')) > 0):
             p = list(self.get('central_point'))
-            r = list(self.get('radius'))
+            r = list(self.get('dimension'))
             d = self.get('direction')
             e = nm.eye(3)[0]
-            geo = geo_obj('Sphere', p + [1.]) % vid
-            geo += ' Dilate {{%s}, {%s}} {Volume{%d};}' % (l2s(p), l2s(r), vid)
+            pars = p + [1.]
+            out = occ.addSphere(*pars)
+            pars = [[(3, out)]] + p + r
+            occ.dilate(*pars)
             ax = nm.cross(e, d)
             if nm.linalg.norm(ax) > 0.0:
                 phi = nm.arccos(nm.dot(e, d) / (nm.linalg.norm(e) * nm.linalg.norm(d)))
-                geo += ' Rotate {{%s}, {%s}, %e} {Volume{%d};}'\
-                    % (l2s(ax), l2s(p), phi, vid)
+                pars = [[(3, out)]] + p + list(ax) + [phi]
+                occ.rotate(*pars)
 
-            return geo, self.get('el_size')
+            return out, self.get('el_size')
 
 class SphericalInclusion(BaseEmbeddedComponent):
     """The spherical inclusion."""
     name = 'Spherical Inclusion'
-    parameters_dict = {'radius': 0}
 
-    def __init__(self, radius=0.1, central_point=(0, 0, 0),
+    def __init__(self, dimension=0.1, central_point=(0, 0, 0),
                  el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
         ----------
-        radius: float
+        dimension: float
             The radius of the sphere.
         central_point: array
             The coordinates of the center: [x, y, z].
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        super(SphericalInclusion, self).__init__(parameters=[radius],
-                                                 central_point=central_point,
-                                                 direction=None,
-                                                 el_size=el_size,
-                                                 mat_id=mat_id)
+        super().__init__(dimension=dimension, central_point=central_point,
+                         direction=None, el_size=el_size, mat_id=mat_id)
 
-    def __call__(self, vid, size):
-        if self.get('radius') > 0:
-            pars = list(self.get('central_point')) + [self.get('radius')]
-            return geo_obj('Sphere', pars) % vid, self.get('el_size')
+    def __call__(self, occ, cell_size=None):
+        r = self.get('dimension')
+        if r > 0:
+            pars = list(self.get('central_point')) + [r]
+            return occ.addSphere(*pars), self.get('el_size')
+
 
 class CylindricalInclusion(BaseEmbeddedComponent):
     """The cylindrical inclusion."""
     name = 'Cylindrical Inclusion'
-    parameters_dict = {'radius': 0, 'length': 1}
 
-    def __init__(self, radius=0.1, length=0.5, central_point=(0, 0, 0),
+    def __init__(self, dimension=(0.1, 0.5), central_point=(0, 0, 0),
                  direction=(1, 0, 0), el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
         ----------
-        radius: float
-            The cylinder radius.
-        length: float
-            The cylinder length.
+        dimension: (float, float)
+            The cylinder radius and length.
         central_point: array
             The coordinates of the center: [x, y, z].
         direction: array
@@ -455,45 +450,40 @@ class CylindricalInclusion(BaseEmbeddedComponent):
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        super(CylindricalInclusion, self).__init__(parameters=[radius, length],
-                                                   central_point=central_point,
-                                                   direction=direction,
-                                                   el_size=el_size,
-                                                   mat_id=mat_id)
+        super().__init__(dimension=dimension, central_point=central_point,
+                         direction=direction, el_size=el_size, mat_id=mat_id)
 
-    def __call__(self, vid, size):
-        r = self.get('radius')
-        h = self.get('length')
+    def __call__(self, occ, cell_size=None):
+        r, h = self.get('dimension')
         d = self.get('direction')
         p = self.get('central_point')
 
         if nm.all(r > 0):
-
             if isinstance(d, str):
                 idir = {'x': 0, 'y': 1, 'z': 2}[d]
-                d = self.direction_tab[d]
+                d = nm.eye(3)[idir]
                 if h is None:
-                    h = size[idir]
+                    h = cell_size[idir]
                     p = p.copy()
                     p[idir] = 0
 
             p0 = p - 0.5 * d * h
             pars = list(p0) + list(d * h) + [r]
 
-            return geo_obj('Cylinder', pars) % vid, self.get('el_size')
+            return occ.addCylinder(*pars), self.get('el_size')
 
 
 class CylindricalChannel(CylindricalInclusion):
     """The cylindrical channel."""
     name = 'Cylindrical Channel'
 
-    def __init__(self, radius=0.1, central_point=(0, 0, 0), direction='x',
+    def __init__(self, dimension=0.1, central_point=(0, 0, 0), direction='x',
                  el_size=0.5, mat_id=2):
         """Init parameters of the channel component.
     
         Parameters
         ----------
-        radius: flaot
+        dimension: float
             The radius of the cylinder.
         central_point: array
             The coordinates of the cylinder center: [x, y, z].
@@ -502,20 +492,17 @@ class CylindricalChannel(CylindricalInclusion):
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        super(CylindricalChannel, self).__init__(radius=radius, length=None,
-                                                 central_point=central_point,
-                                                 direction=direction,
-                                                 el_size=el_size,
-                                                 mat_id=mat_id)
+        super().__init__(dimension=(dimension, None),
+                         central_point=central_point, direction=direction,
+                         el_size=el_size, mat_id=mat_id)
 
 
 class BoxInclusion(BaseEmbeddedComponent):
     """The box inclusion."""
     name = 'Box Inclusion'
-    parameters_dict = {'size': 0}
     
-    def __init__(self, size=(0.3, 0.2, 0.1), central_point=(0, 0, 0),
-                 el_size=0.5, mat_id=2):
+    def __init__(self, dimension=(0.3, 0.2, 0.1), central_point=(0, 0, 0),
+                 direction=None, el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -527,40 +514,36 @@ class BoxInclusion(BaseEmbeddedComponent):
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        super(BoxInclusion, self).__init__(parameters=[size],
-                                           central_point=central_point,
-                                           direction=None,
-                                           el_size=el_size,
-                                           mat_id=mat_id)
+        super().__init__(dimension=dimension, central_point=central_point,
+                         direction=direction, el_size=el_size, mat_id=mat_id)
 
-    def __call__(self, vid, size):
+    def __call__(self, occ, cell_size=None):
         d = self.get('direction')
         if d is None:
-            s = nm.array(self.get('size'))
+            s = nm.array(self.get('dimension'))
             p = self.get('central_point')
         else:
-            s = nm.array(size)
+            s = nm.array(cell_size)
             idir = {'x': 0, 'y': 1, 'z': 2}[d]
-            s[idir] = self.get('thickness')
+            s[idir] = self.get('dimension')
             p = nm.zeros(3, dtype=nm.float64)
             p[idir] = self.get('central_point')[idir]
 
         if nm.all(s > 0):
             pars = list(p - 0.5 * s) + list(s)
-            return geo_obj('Box', pars) % vid, self.get('el_size')
+            return occ.addBox(*pars), self.get('el_size')
 
 class SandwichLayer(BoxInclusion):
     """The sandwich layer."""
     name = 'Sandwich Layer'
-    parameters_dict = {'thickness': 0}
-    
-    def __init__(self, thickness=0.1, central_point=(0, 0, 0),
+
+    def __init__(self, dimension=0.1, central_point=(0, 0, 0),
                  direction='x', el_size=0.5, mat_id=2):
         """Init parameters of the component.
     
         Parameters
         ----------
-        thickness: array
+        dimension: array
             The thicknesss of the layer.
         central_point: array
             The coordinates of the center: [x, y, z].
@@ -569,82 +552,78 @@ class SandwichLayer(BoxInclusion):
         el_size: float
             The "inner" element size factor: in_el_size = el_size * el_size_base.
         """
-        super(SandwichLayer, self).__init__(size=thickness,
-                                            central_point=central_point,
-                                            el_size=el_size,
-                                            mat_id=mat_id)
-        self.params['direction'] = direction
+        super().__init__(dimension=dimension, central_point=central_point,
+                         direction=direction, el_size=el_size, mat_id=mat_id)
 
 
-class SweepedChannel(BaseEmbeddedComponent):
-    """The sweeped channel."""
-    name = 'Sweeped Channel'
+# class SweepedChannel(BaseEmbeddedComponent):
+#     """The sweeped channel."""
+#     name = 'Sweeped Channel'
 
-    def __init__(self, profile=[[0.1, 0], [0, 0.1], [-0.1, -0.1]],
-                 path=[[0, 0], [0.3, 0.1], [1, 0]], central_point=(0, 0, 0),
-                 direction='x', es_dmin=1.1, es_dmax=1.3, el_size=0.5, mat_id=2):
-        """Init parameters of the component.
+#     def __init__(self, dimension=([[0.1, 0], [0, 0.1], [-0.1, -0.1]],
+#                                   [[0, 0], [0.3, 0.1], [1, 0]]),
+#                  central_point=(0, 0, 0), direction='x', es_dmin=1.1,
+#                  es_dmax=1.3, el_size=0.5, mat_id=2):
+#         """Init parameters of the component.
     
-        Parameters
-        ----------
-        !!!
+#         Parameters
+#         ----------
+#         dimension:
+#             ???
+#         central_point: array
+#             The coordinates of the center: [x, y, z].
+#         direction: array
+#             The directional vector.
+#         el_size: float
+#             The "inner" element size factor: in_el_size = el_size * el_size_base.
+#         """
+#         super().__init__(dimension=dimension, central_point=central_point,
+#                          direction=direction,
+#                          es_dmin=es_dmin, es_dmax=es_dmax, el_size=el_size,
+#                          mat_id=mat_id)
 
-        central_point: array
-            The coordinates of the center: [x, y, z].
-        direction: array
-            The directional vector.
-        el_size: float
-            The "inner" element size factor: in_el_size = el_size * el_size_base.
-        """
-        super(SweepedChannel, self).__init__(parameters=(profile, path),
-                                             central_point=central_point,
-                                             direction=direction,
-                                             es_dmin=es_dmin,
-                                             es_dmax=es_dmax,
-                                             el_size=el_size,
-                                             mat_id=mat_id)
+#     def __call__(self, vid, size):
+#         profile = self.get('profile')
+#         path = self.get('path')
+#         d = self.get('direction')
+#         p = self.get('central_point')
+#         label = '%s_%d' % (self.name, self.get('mat_id'))
 
-    # def __call__(self, vid, size):
-    #     profile = self.get('profile')
-    #     path = self.get('path')
-    #     d = self.get('direction')
-    #     p = self.get('central_point')
-    #     label = '%s_%d' % (self.name, self.get('mat_id'))
+#         attrs = []
 
-    #     attrs = []
+#         if isinstance(d, str):
+#             idir = {'x': 0, 'y': 1, 'z': 2}[d]
+#             d = self.direction_tab[d]
+#             h = size[idir]
+#             p = p.copy()
+#             p[idir] = 0
 
-    #     if isinstance(d, str):
-    #         idir = {'x': 0, 'y': 1, 'z': 2}[d]
-    #         d = self.direction_tab[d]
-    #         h = size[idir]
-    #         p = p.copy()
-    #         p[idir] = 0
+#         sk_profile = self.get_sketch(profile[1], 'profile', cont,
+#                                      is_closed=True, path_type=profile[0],
+#                                      plane='yz')
 
-    #     sk_profile = self.get_sketch(profile[1], 'profile', cont,
-    #                                  is_closed=True, path_type=profile[0],
-    #                                  plane='yz')
+#         path_pts = nm.asarray(path[1])
+#         path_pts[:, 0] = (path_pts[:, 0] - 0.5) * h
 
-    #     path_pts = nm.asarray(path[1])
-    #     path_pts[:, 0] = (path_pts[:, 0] - 0.5) * h
+#         sp_path = self.get_sketch(path_pts, 'path', cont,
+#                                   is_closed=True, path_type=path[0],
+#                                   plane='xy')
 
-    #     sp_path = self.get_sketch(path_pts, 'path', cont,
-    #                               is_closed=True, path_type=path[0],
-    #                               plane='xy')
+#         ch = cont.addObject('Part::Sweep', label)
+#         ch.Sections = [sk_profile]
+#         ch.Spine = (sp_path,[])
+#         ch.Solid = True
+#         ch.Frenet = False
 
-    #     ch = cont.addObject('Part::Sweep', label)
-    #     ch.Sections = [sk_profile]
-    #     ch.Spine = (sp_path,[])
-    #     ch.Solid = True
-    #     ch.Frenet = False
+#         attr_comm = (r * self.get('es_dmin'), r * self.get('es_dmax'),
+#                      self.get('el_size'))
+#         p1 = p - 0.5 * d * h * 1.2
+#         p2 = p - 0.5 * d * h * 1
+#         for ii in range(len(path_pts)):
+#             attrs = [('line', [path_pts[ii], path_pts[ii + 1]]) + attr_comm]
 
-    #     attr_comm = (r * self.get('es_dmin'), r * self.get('es_dmax'),
-    #                  self.get('el_size'))
-    #     p1 = p - 0.5 * d * h * 1.2
-    #     p2 = p - 0.5 * d * h * 1
-    #     for ii in range(len(path_pts)):
-    #         attrs = [('line', [path_pts[ii], path_pts[ii + 1]]) + attr_comm]
+#         return ch, attrs
 
-    #     return ch, attrs
 
 pucgen_classes = [
     BaseCell,
@@ -657,7 +636,7 @@ pucgen_classes = [
 ]
 
 usage = 'Usage: %prog [[options] filename_in]'
-version = '0.1'
+version = '0.2'
 helps = {
     'reps': 'construct grid by repeating unit cell, number of repetition defined by NX, NY, NZ',
     'sizex': 'resize geometry uniformly such that its size in x-direction is SIZE_X',

@@ -1,5 +1,4 @@
 import os
-import sys
 import numpy as nm
 from scipy.spatial import cKDTree
 import meshio
@@ -153,24 +152,6 @@ def meshio_read(filename):
     return mesh
 
 
-def call_gmsh(filename_base, dim=3, export_elems='tetra',
-              node_groups=None, shift=None, scale=None):
-
-    os.system(f'gmsh -{dim} {filename_base}.geo -o {filename_base}.msh')
-
-    mesh = meshio_read(f'{filename_base}.msh')
-
-    if shift is not None:
-        mesh.points += shift
-
-    if scale is not None:
-        mesh.points *= scale
-
-    fname = f'{filename_base}.vtk'
-    print(f'writing mesh to {fname}')
-    mesh.write(fname, binary=False)
-
-
 def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
     mesh = meshio_read(filename_in)
 
@@ -182,7 +163,7 @@ def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
     if grid is not None:
         for idim, igrid in enumerate(grid):
             if igrid <= 0:
-                raise ValueError('Incorrect number of repetition! (%s)' % grid)
+                raise ValueError(f'Incorrect number of repetition! ({grid})')
 
             nnodes = nodes.shape[0]
             idir = nm.eye(3)[idim] * cell_size
