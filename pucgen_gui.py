@@ -55,6 +55,7 @@ check_edit_types = {
     'o': ['filename_in', 'filename_out'],
 }
 
+
 def check_edits(edits):
     pars = {}
     ok_ = True
@@ -101,6 +102,7 @@ def check_edits(edits):
 
     return pars, ok_
 
+
 class SetParamsDialog(QDialog):
     def __init__(self, parent, name, params):
         super(SetParamsDialog, self).__init__(parent=parent)
@@ -135,6 +137,7 @@ class SetParamsDialog(QDialog):
         if ok:
             return self.accept()
 
+
 class MainWindow(QMainWindow):
 
     def __init__(self):
@@ -145,9 +148,9 @@ class MainWindow(QMainWindow):
         self.components = []
         self.puc = None
 
-        self.initUI()
+        self.init_ui()
 
-    def init_RepeaterTab(self):
+    def init_repeater_tab(self):
         vbox = QVBoxLayout()
         vbox.setSpacing(10)
 
@@ -232,8 +235,7 @@ class MainWindow(QMainWindow):
             self.mesh_info_line2.setText(text)
             self.repeater_mesh = mesh
 
-    def init_GeneratorTab(self):
-
+    def init_generator_tab(self):
         self.gen_classes = pucgen_classes
         self.class_args = {}
         clslist = []
@@ -313,8 +315,7 @@ class MainWindow(QMainWindow):
         self.listbox.clear()
         for ii, (cls, pars, act) in enumerate(self.components):
             flag = ' ' if act else '#'
-            self.listbox.addItem('%s%s (%d)' % (flag, cls.__name__,
-                                                pars['mat_id']))
+            self.listbox.addItem(f'{flag}{cls.__name__} ({pars["mat_id"]})')
             if not act:
                 self.listbox.item(ii).setForeground(QColor('lightGray'))
 
@@ -365,7 +366,7 @@ class MainWindow(QMainWindow):
         if idx == 0:
             MessageBox('Can not deactivate Base Cell!')
         else:
-            self.components[idx][2] = not(self.components[idx][2])
+            self.components[idx][2] = not self.components[idx][2]
             self.listbox_update(selected=idx)
 
     def save_puc(self, **kwargs):
@@ -389,7 +390,7 @@ class MainWindow(QMainWindow):
             self.listbox_update()
             self.gen_info_line.setText(f'loaded {fname}')
 
-    def initUI(self):
+    def init_ui(self):
         import os.path as op
         path_to_script = op.dirname(os.path.abspath(__file__))
 
@@ -424,11 +425,11 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
 
         tab1 = QWidget()
-        tab1.setLayout(self.init_GeneratorTab())
+        tab1.setLayout(self.init_generator_tab())
         tabs.addTab(tab1, 'Generator')
 
         tab3 = QWidget()
-        tab3.setLayout(self.init_RepeaterTab())
+        tab3.setLayout(self.init_repeater_tab())
         tabs.addTab(tab3, 'Repeater')
 
         vbox.addWidget(tabs)
@@ -460,19 +461,13 @@ class MainWindow(QMainWindow):
                 if act:
                     self.puc.add(cls(**pars))
 
-            failed = False
             try:
                 self.puc(fname)
             except:
                 MessageBox('Gmsh error!', 'error')
-                failed = True
 
             self.gen_info_line.setText(f'generated {fname}')
 
-            # if not failed:
-            #     viewer = VTKViewer(self, out_file,
-            #                        self.components[0][1].get('mat_id'))
-            #     viewer.exec()
 
 def main():
     app = QApplication(sys.argv)
