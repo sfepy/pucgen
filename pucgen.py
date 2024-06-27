@@ -169,7 +169,6 @@ class PUC(object):
         if cell_size is None:
             cell_size = self.components[0].get('dimension')
 
-        element_size = self.components[0].get('el_size')
         cell_size = nm.asarray(cell_size, dtype=nm.float64)
 
         mat_ids = []
@@ -352,7 +351,7 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
     name = 'Ellipsoidal Inclusion'
 
     def __init__(self, dimension=(0.1, 0.1, 0.1), central_point=(0, 0, 0),
-                 direction=(1, 0, 0), el_size=0.5, mat_id=2):
+                 direction=(1, 0, 0), el_size=0.05, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -392,7 +391,7 @@ class SphericalInclusion(BaseEmbeddedComponent):
     name = 'Spherical Inclusion'
 
     def __init__(self, dimension=0.1, central_point=(0, 0, 0),
-                 el_size=0.5, mat_id=2):
+                 el_size=0.05, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -419,7 +418,7 @@ class CylindricalInclusion(BaseEmbeddedComponent):
     name = 'Cylindrical Inclusion'
 
     def __init__(self, dimension=(0.1, 0.5), central_point=(0, 0, 0),
-                 direction=(1, 0, 0), el_size=0.5, mat_id=2):
+                 direction=(1, 0, 0), el_size=0.05, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -461,7 +460,7 @@ class CylindricalChannel(CylindricalInclusion):
     name = 'Cylindrical Channel'
 
     def __init__(self, dimension=0.1, central_point=(0, 0, 0), direction='x',
-                 el_size=0.5, mat_id=2):
+                 el_size=0.05, mat_id=2):
         """Init parameters of the channel component.
     
         Parameters
@@ -483,9 +482,9 @@ class CylindricalChannel(CylindricalInclusion):
 class BoxInclusion(BaseEmbeddedComponent):
     """The box inclusion."""
     name = 'Box Inclusion'
-    
+
     def __init__(self, dimension=(0.3, 0.2, 0.1), central_point=(0, 0, 0),
-                 direction=None, el_size=0.5, mat_id=2):
+                 direction=None, el_size=0.05, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -521,7 +520,7 @@ class SandwichLayer(BoxInclusion):
     name = 'Sandwich Layer'
 
     def __init__(self, dimension=0.1, central_point=(0, 0, 0),
-                 direction='x', el_size=0.5, mat_id=2):
+                 direction='x', el_size=0.05, mat_id=2):
         """Init parameters of the component.
     
         Parameters
@@ -546,7 +545,7 @@ class SandwichLayer(BoxInclusion):
 #     def __init__(self, dimension=([[0.1, 0], [0, 0.1], [-0.1, -0.1]],
 #                                   [[0, 0], [0.3, 0.1], [1, 0]]),
 #                  central_point=(0, 0, 0), direction='x', es_dmin=1.1,
-#                  es_dmax=1.3, el_size=0.5, mat_id=2):
+#                  es_dmax=1.3, el_size=0.05, mat_id=2):
 #         """Init parameters of the component.
     
 #         Parameters
@@ -642,11 +641,12 @@ def main():
 
     if len(args) == 0: # run GUI
         from pucgen_gui import MainWindow
-        from PyQt5.QtWidgets import QApplication
+        from PyQt6.QtWidgets import QApplication
 
         app = QApplication(sys.argv)
         mw = MainWindow()
-        sys.exit(app.exec_())
+        mw.show()
+        app.exec()
     else:
         filename_base, filename_ext = os.path.splitext(args[0])
 
