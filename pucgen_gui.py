@@ -12,11 +12,11 @@ from copy import deepcopy
 from ast import literal_eval
 from functools import reduce
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget,\
-     QHBoxLayout, QVBoxLayout, QTabWidget, QLineEdit,\
-     QLabel, QPushButton, QFrame, QFileDialog, QMessageBox,\
-     QComboBox, QListWidget, QDialog, QDialogButtonBox
-from PyQt5.QtGui import QFont, QPixmap, QPalette, QColor
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
+     QHBoxLayout, QVBoxLayout, QTabWidget, QLineEdit,
+     QLabel, QPushButton, QFrame, QFileDialog, QMessageBox,
+     QComboBox, QListWidget, QDialog, QDialogButtonBox)
+from PyQt6.QtGui import QFont, QPixmap, QPalette, QColor
 
 from pucgen import PUC, pucgen_classes, version
 from vtk_viewer import VTKViewer
@@ -26,44 +26,31 @@ params_dict = {}
 
 def MessageBox(s, type='warning'):
     title, qmb = {
-        'warning': ('Warning', QMessageBox.Warning),
-        'error': ('Error', QMessageBox.Critical)
+        'warning': ('Warning', QMessageBox.Icon.Warning),
+        'error': ('Error', QMessageBox.Icon.Critical)
     }[type]
 
     msg = QMessageBox()
     msg.setIcon(qmb)
     msg.setText(s)
     msg.setWindowTitle(title)
-    msg.setStandardButtons(QMessageBox.Ok)
-    msg.exec_()
+    msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+    msg.exec()
 
-def OverwriteBox(filename):
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Warning)
-    msg.setText('The file "%s" already exists. Do you wish to overwrite it?' % filename)
-    msg.setWindowTitle('Overwrite File?')
-    msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-    btn_ok = msg.button(QMessageBox.Ok)
-    btn_ok.setText('Overwrite')
-    msg.exec_()
 
-    if msg.clickedButton() == btn_ok:
-        return True
-    else:
-        return False
+def select_vtk_open(parent, s, default=''):
+    return QFileDialog.getOpenFileName(parent, s, default, 'VTK(*.vtk)')[0]
 
-def select_vtk_file(parent, s, le, default=''):
-    dlg = QFileDialog(parent, s, default, 'VTK(*.vtk)')
-    dlg.setLabelText(QFileDialog.Accept, 'Choose')
-    if dlg.exec_():
-        le.setText(dlg.selectedFiles()[0])
-        le.setStyleSheet('background-color: white')
+
+def select_vtk_save(parent, s, default=''):
+    return QFileDialog.getSaveFileName(parent, s, default, 'VTK(*.vtk)')[0]
+
 
 check_edit_types = {
-    'np': ['mat_id', 'radius', 'length', 'thickness',
-          'es_dmin', 'es_dmax', 'es_in', 'size', 'size_x', 'el_size'],
-    'n3p': ['radius', 'size', 'grid'],
+    'np': ['dimension', 'mat_id', 'el_size', 'size_x'],
+    'n3p': ['grid'],
     'n3': ['central_point', 'direction'],
+    'nn': ['dimension'],
     's': ['direction'],
     'o': ['filename_in', 'filename_out'],
 }
@@ -84,19 +71,23 @@ def check_edits(edits):
                 pars[k] = literal_eval(val)
             except:
                 ok = False
-   
+
             if ok:
-                if k in check_edit_types['np']\
-                    and isinstance(pars[k], (int, float))\
-                    and pars[k] > 0:
+                if (k in check_edit_types['np']
+                    and isinstance(pars[k], (int, float)) and pars[k] > 0):
                     pass
-                elif k in check_edit_types['n3p']\
-                    and isinstance(pars[k], tuple) and len(pars[k]) == 3\
-                    and reduce(lambda a, b: a and b,
-                               map(lambda x: x>=0, pars[k])):
+                elif (k in check_edit_types['n3p']
+                      and isinstance(pars[k], tuple) and len(pars[k]) == 3
+                      and reduce(lambda a, b: a and b,
+                                 map(lambda x: x>=0, pars[k]))):
                     pass
-                elif  k in check_edit_types['n3']\
-                    and isinstance(pars[k], tuple) and len(pars[k]) == 3:
+                elif (k in check_edit_types['n3']
+                      and isinstance(pars[k], tuple) and len(pars[k]) == 3):
+                    pass
+                elif (k in check_edit_types['nn']
+                      and isinstance(pars[k], tuple)
+                      and reduce(lambda a, b: a and b,
+                        map(lambda x: isinstance(x, (int, float)), pars[k]))):
                     pass
                 else:
                     ok = False
@@ -121,18 +112,18 @@ class SetParamsDialog(QDialog):
             'el_size': 'element size',
         }
 
-        self.setWindowTitle('Edit %s parameters' % name)
+        self.setWindowTitle(f'Edit {name} parameters')
         self.vbox = QVBoxLayout()
         for nm, val in params:
             hbox = QHBoxLayout()
-            hbox.addWidget(QLabel('%s:' % params_tr_dict.get(nm, nm)))
+            hbox.addWidget(QLabel(f'{params_tr_dict.get(nm, nm)}:'))
             le = QLineEdit(val)
-            self.edits[nm] = le  
+            self.edits[nm] = le
             hbox.addStretch(1)
             hbox.addWidget(le)
             self.vbox.addLayout(hbox)
 
-        btns = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        btns = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         btnbox = QDialogButtonBox(btns)
         btnbox.accepted.connect(self.check_values)
         btnbox.rejected.connect(self.reject)
@@ -150,8 +141,9 @@ class MainWindow(QMainWindow):
         QMainWindow.__init__(self)
 
         self.base_cell_mat_id = None
-        self.next_component_id = 1 
+        self.next_component_id = 1
         self.components = []
+        self.puc = None
 
         self.initUI()
 
@@ -162,33 +154,21 @@ class MainWindow(QMainWindow):
         vbox = QVBoxLayout()
 
         hbox1 = QHBoxLayout()
-        hbox1.addWidget(QLabel('Input VTK file:'))
+        hbox1.addStretch(1)
+        btn_select_in_file = QPushButton('Open VTK', self)
+        btn_select_in_file.clicked.connect(self.repeater_open_in_file)
+        hbox1.addWidget(btn_select_in_file)
         hbox1.addStretch(1)
         vbox.addLayout(hbox1)
 
-        hbox2 = QHBoxLayout()
-        self.repeter_in_file = QLineEdit('')
-        hbox2.addWidget(self.repeter_in_file)
-        btn_select_in_file = QPushButton('...', self)
-        btn_select_in_file.clicked.connect(self.repeater_select_in_file)
-        width = btn_select_in_file.fontMetrics().boundingRect('...').width() + 20
-        btn_select_in_file.setMaximumWidth(width)
-        hbox2.addWidget(btn_select_in_file)
-        vbox.addLayout(hbox2)
-
-        hbox1b = QHBoxLayout()
-        hbox1b.addWidget(QLabel('Output VTK file:'))
-        hbox1b.addStretch(1)
-        vbox.addLayout(hbox1b)
+        hbox2a = QHBoxLayout()
+        self.mesh_info_line1 = QLabel('')
+        hbox2a.addWidget(self.mesh_info_line1)
+        vbox.addLayout(hbox2a)
 
         hbox2b = QHBoxLayout()
-        self.repeter_out_file = QLineEdit('')
-        hbox2b.addWidget(self.repeter_out_file)
-        btn_select_out_file = QPushButton('...', self)
-        btn_select_out_file.clicked.connect(self.repeater_select_out_file)
-        width = btn_select_out_file.fontMetrics().boundingRect('...').width() + 20
-        btn_select_out_file.setMaximumWidth(width)
-        hbox2b.addWidget(btn_select_out_file)
+        self.mesh_info_line2 = QLabel('')
+        hbox2b.addWidget(self.mesh_info_line2)
         vbox.addLayout(hbox2b)
 
         hbox3 = QHBoxLayout()
@@ -205,44 +185,52 @@ class MainWindow(QMainWindow):
         hbox4.addStretch(1)
         vbox.addLayout(hbox4)
 
+        vbox.addStretch(1)
+
         hbox5 = QHBoxLayout()
         hbox5.addStretch(1)
         btn_gen_grid = QPushButton('Generate grid', self)
         btn_gen_grid.clicked.connect(self.repeater_generate_grid)
         hbox5.addWidget(btn_gen_grid)
         hbox5.addStretch(1)
-
-        vbox.addStretch(1)
         vbox.addLayout(hbox5)
+
+        hbox5a = QHBoxLayout()
+        self.rep_info_line = QLabel('')
+        hbox5a.addWidget(self.rep_info_line)
+        vbox.addLayout(hbox5a)
         vbox.addStretch(1)
 
-        self.edits_to_check = {'grid': grid, 'size_x': size_x,
-                               'filename_in': self.repeter_in_file,
-                               'filename_out': self.repeter_out_file}
+        self.edits_to_check = {'grid': grid, 'size_x': size_x}
 
         return vbox
 
     def repeater_generate_grid(self):
         from gen_mesh_utils import repeat_cell
 
+        fname = select_vtk_save(self, 'Output VTK file')
+
         pars, ok = check_edits(self.edits_to_check)
 
-        if ok:
-            out_file = pars['filename_out']
-            if os.path.exists(out_file):
-                ok = ok & OverwriteBox(os.path.split(out_file)[1])
-
-        if ok:
-            repeat_cell(pars['filename_in'], out_file,
+        if ok and (len(fname) > 0):
+            repeat_cell(self.repeater_mesh, fname,
                         pars['grid'], pars['size_x'])
-            viewer = VTKViewer(self, out_file, mat_id=None)
-            viewer.exec_()
+            self.rep_info_line.setText(f'generated {fname}')
+            # viewer = VTKViewer(self, fname, mat_id=None)
+            # viewer.exec()
 
-    def repeater_select_in_file(self):
-        select_vtk_file(self, 'Input VTK file', self.repeter_in_file)
+    def repeater_open_in_file(self):
+        fname = select_vtk_open(self, 'Input VTK file')
 
-    def repeater_select_out_file(self):
-        select_vtk_file(self, 'Output VTK file', self.repeter_out_file)
+        if len(fname) > 0:
+            from gen_mesh_utils import meshio_read
+            mesh = meshio_read(fname)
+            self.mesh_info_line1.setText(fname)
+            text = f'points: {mesh.points.shape[0]}, '
+            text += ', '.join([f'{cg.type}: {cg.data.shape[0]}'
+                               for cg in mesh.cells])
+            self.mesh_info_line2.setText(text)
+            self.repeater_mesh = mesh
 
     def init_GeneratorTab(self):
 
@@ -274,7 +262,7 @@ class MainWindow(QMainWindow):
         vbox1.addWidget(btn_new)
         vbox1.addWidget(self.cmb_new)
         hr = QFrame()
-        hr.setFrameShape(QFrame.HLine)
+        hr.setFrameShape(QFrame.Shape.HLine)
         vbox1.addWidget(hr)
         vbox1.addWidget(btn_edit)
         vbox1.addWidget(btn_delete)
@@ -298,21 +286,6 @@ class MainWindow(QMainWindow):
         vbox.addStretch(1)
 
         hbox = QHBoxLayout()
-        hbox.addWidget(QLabel('Output VTK file:'))
-        hbox.addStretch(1)
-        vbox.addLayout(hbox)
-
-        hbox = QHBoxLayout()
-        self.generator_out_file = QLineEdit('')
-        hbox.addWidget(self.generator_out_file)
-        btn_select_in_file = QPushButton('...', self)
-        btn_select_in_file.clicked.connect(self.generator_select_out_file)
-        width = btn_select_in_file.fontMetrics().boundingRect('...').width() + 20
-        btn_select_in_file.setMaximumWidth(width)
-        hbox.addWidget(btn_select_in_file)
-        vbox.addLayout(hbox)
-
-        hbox = QHBoxLayout()
         hbox.addStretch(1)
         btn_save = QPushButton('Save', self)
         btn_save.clicked.connect(self.save_puc)
@@ -327,12 +300,14 @@ class MainWindow(QMainWindow):
 
         vbox.addLayout(hbox)
 
+        hbox = QHBoxLayout()
+        self.gen_info_line = QLabel('')
+        hbox.addWidget(self.gen_info_line)
+        vbox.addLayout(hbox)
+
         self.new_component(base_cell=True)
 
         return vbox
-
-    def generator_select_out_file(self):
-        select_vtk_file(self, 'Output VTK file', self.generator_out_file)
 
     def listbox_update(self, selected=0):
         self.listbox.clear()
@@ -371,9 +346,9 @@ class MainWindow(QMainWindow):
             scpars.append([k, sval])
 
         dlg = SetParamsDialog(self, cls.__name__, scpars)
-        if dlg.exec_():
+        if dlg.exec():
             for k in pars.keys():
-                 pars[k] = dlg.params_dict[k]
+                pars[k] = dlg.params_dict[k]
 
             self.listbox_update(selected=idx)
 
@@ -401,6 +376,7 @@ class MainWindow(QMainWindow):
 
         if len(fname) > 0:
             PUC.save_puc(fname, self.components)
+            self.gen_info_line.setText(f'saved to {fname}')
 
     def load_puc(self, **kwargs):
         fname = kwargs.get('fname', None)
@@ -411,6 +387,7 @@ class MainWindow(QMainWindow):
         if len(fname) > 0:
             self.components = PUC.load_puc(fname)
             self.listbox_update()
+            self.gen_info_line.setText(f'loaded {fname}')
 
     def initUI(self):
         import os.path as op
@@ -425,7 +402,7 @@ class MainWindow(QMainWindow):
         font_info = QFont()
         font_info.setItalic(True)
         font_info.setPixelSize(12)
-        info = QLabel('Version: %s' % version)
+        info = QLabel(f'Version: {version}')
         info.setFont(font_info)
         vbox1.addStretch(1)
         vbox1.addWidget(info)
@@ -475,14 +452,9 @@ class MainWindow(QMainWindow):
         self.close()
 
     def generate(self):
-        pars, ok = check_edits({'filename_out': self.generator_out_file})
+        fname = select_vtk_save(self, 'Output VTK file')
 
-        if ok:
-            out_file = pars['filename_out']
-            if os.path.exists(out_file):
-                ok = ok & OverwriteBox(os.path.split(out_file)[1])
-
-        if ok and len(out_file) > 0:
+        if len(fname) > 0:
             self.puc = PUC(cell_mat_id=None)
             for cls, pars, act in self.components:
                 if act:
@@ -490,20 +462,23 @@ class MainWindow(QMainWindow):
 
             failed = False
             try:
-                self.puc(out_file)
+                self.puc(fname)
             except:
                 MessageBox('Gmsh error!', 'error')
                 failed = True
 
-            if not failed:
-                viewer = VTKViewer(self, out_file,
-                                   self.components[0][1].get('mat_id'))
-                viewer.exec_()
+            self.gen_info_line.setText(f'generated {fname}')
+
+            # if not failed:
+            #     viewer = VTKViewer(self, out_file,
+            #                        self.components[0][1].get('mat_id'))
+            #     viewer.exec()
 
 def main():
     app = QApplication(sys.argv)
     mw = MainWindow()
-    sys.exit(app.exec_())
+    mw.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
