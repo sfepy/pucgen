@@ -7,30 +7,13 @@ PUCGEN - GUI for Periodic Unit Cell generator
 
 import sys
 import os
+from optparse import OptionParser
 import numpy as nm
 import gmsh
 import meshio
 from inspect import getargspec
 from ast import literal_eval
-from optparse import OptionParser
 from gen_mesh_utils import repeat_cell
-
-
-# def l2s(l):
-#     return str(list(l))[1:-1]
-
-# def b2s_delete(b):
-#     return 'Delete;' if b else ''
-
-# def geo_obj(obj, pars):
-#     return '%s(%%d) = {%s};' % (obj, l2s(pars))
-
-
-# def volumes_boolean(l1, l2, operation, el_size, delete1=True, delete2=True):
-#     esize = nm.min([el_size[k] for k in l1 + l2 if el_size[k] is not None])
-#     return "Boolean%s(%%d) = {Volume{%s}; %s}{Volume{%s}; %s};"\
-#         % (operation, l2s(l1), b2s_delete(delete1), l2s(l2),
-#            b2s_delete(delete2)), esize
 
 
 class PUC(object):
