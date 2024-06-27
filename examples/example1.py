@@ -1,6 +1,6 @@
 from pucgen import PUC, BaseCell, SphericalInclusion, CylindricalChannel
 
-puc = PUC(cell_mat_id=1)
+puc = PUC(cell_mat_id=None)
 
 puc.add(BaseCell(dimension=(1, 1, 1), el_size=0.1, mat_id=5))
 puc.add(SphericalInclusion(dimension=0.3, central_point=(0, 0, 0),
