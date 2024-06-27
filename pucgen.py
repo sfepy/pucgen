@@ -20,18 +20,22 @@ class PUC(object):
     """Periodic Unit Cell object."""
     def __init__(self, cell_mat_id=1, base_cell=None):
         """Init PUC"""
+        gmsh.initialize()
+        gmsh.logger.start()
+        gmsh.model.add('boolean')
+
+        self.model = gmsh.model
+        self.occ = gmsh.model.occ
+
         if cell_mat_id is None:
             self.components = []
-
-            gmsh.initialize()
-            gmsh.logger.start()
-            gmsh.model.add('boolean')
-
-            self.model = gmsh.model
-            self.occ = gmsh.model.occ
         else:
             self.components = [BaseCell(mat_id=cell_mat_id)\
                                if base_cell is None else base_cell]
+
+    def __str__(self):
+        comps = [str(k) for k in self.components]
+        return f'[{", ".join(comps)}]'
 
     def finalize(self):
         print('\n'.join(gmsh.logger.get()))
@@ -239,6 +243,7 @@ class PUC(object):
         self.finalize()
 
         mesh = meshio.read(fname)
+        os.remove(fname)
 
         if not centered:
             mesh.points += nm.asarray(cell_size) * 0.5
@@ -248,9 +253,8 @@ class PUC(object):
         mesh.cell_data = {'mat_id': mesh.cell_data['gmsh:physical']}
 
         fname = f'{filename_base}.vtk'
-        print(f"Writing '{fname}'...")
         mesh.write(fname, binary=False)
-        print(f"Done writing '{fname}'")
+        print(f"VTK mesh saved to '{fname}'")
 
 
 class BaseComponent(object):
@@ -265,8 +269,6 @@ class BaseComponent(object):
         mat_id: int
             The component material id.
         """
-        print(f'new BaseComponent: {self.name}')
-
         self.params = {'mat_id': mat_id}
         self.active = True
 
@@ -287,6 +289,10 @@ class BaseComponent(object):
         el_size: float
             The element size factor.
         """
+
+    def __str__(self):
+        flag = '#' if self.active is False else ''
+        return flag + self.name
 
     def get(self, key):
         return self.params[key]
