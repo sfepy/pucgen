@@ -152,8 +152,9 @@ def meshio_read(filename):
     return mesh
 
 
-def repeat_cell(filename_in, filename_out, grid, size_x, tol=1e-9):
-    mesh = meshio_read(filename_in)
+def repeat_cell(mesh, filename_out, grid, size_x, tol=1e-9):
+    if not isinstance(mesh, meshio.Mesh):
+        mesh = meshio_read(mesh)
 
     nodes = mesh.points
     pdata = mesh.point_data
