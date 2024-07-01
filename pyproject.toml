@@ -1,5 +1,15 @@
 [build-system]
-requires = [
-    "setuptools",
-]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["pucgen", "gen_mesh_utils", "pucgen_gui"]
+
+[project]
+name = "pucgen"
+version = "0.2"
+license = {text = "MIT License"}
+readme = "README.md"
+authors = [{name = "Vladimir Lukes", email = "vlukes@kme.zcu.cz"}]
+requires-python = ">= 3.8"
+dependencies = ["gmsh", "meshio"]
