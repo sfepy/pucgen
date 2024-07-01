@@ -226,7 +226,13 @@ class PUC(object):
         self.occ.synchronize()
 
         model = self.model
-        for objs, mat_id, es in zip(out, mat_ids, fesize):
+        for k, objs_ in enumerate(out):
+            mat_id = mat_ids[k]
+            es = fesize[k]
+            out2 = out.copy()
+            del out2[k]
+            others = set(sum(out2, []))
+            objs = [kk for kk in objs_ if kk not in others or len(objs_) == 1]
             model.addPhysicalGroup(3, objs, mat_id)
             pts = model.getBoundary(self.get_gmsh3(objs), False, False, True)
             model.mesh.setSize(pts, es)
