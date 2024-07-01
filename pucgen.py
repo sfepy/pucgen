@@ -143,10 +143,10 @@ class PUC(object):
         rft = bbox[1] + eps
 
         rft1 = rft.copy()
-        rft1[dim] = lnb[dim] + eps
+        rft1[dim] = lnb[dim] + 2*eps
 
         lnb2 = lnb.copy()
-        lnb2[dim] = rft[dim] - eps
+        lnb2[dim] = rft[dim] - 2*eps
 
         pars = list(lnb) + list(rft1) + [2]
         p1 = self.model.getEntitiesInBoundingBox(*pars)
