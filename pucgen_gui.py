@@ -7,7 +7,7 @@ PUCGEN - GUI for Periodic Unit Cell generator
 
 import sys
 import os
-from inspect import getargspec
+from inspect import signature
 from copy import deepcopy
 from ast import literal_eval
 from functools import reduce
@@ -241,10 +241,9 @@ class MainWindow(QMainWindow):
         clslist = []
 
         for cls in self.gen_classes:
-            args, _, _, defaults = getargspec(cls.__init__)
-
-            clsargs = tuple(zip(args[1:], defaults))
-            self.class_args[cls.__name__] = clsargs
+            sig = signature(cls.__init__)
+            clsargs = [(k, v.default) for k, v in sig.parameters.items()]
+            self.class_args[cls.__name__] = clsargs[1:]
             clslist.append(cls.__name__)
 
         vbox = QVBoxLayout()

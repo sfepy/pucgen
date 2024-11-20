@@ -11,7 +11,7 @@ from optparse import OptionParser
 import numpy as nm
 import gmsh
 import meshio
-from inspect import getargspec
+from inspect import signature
 from ast import literal_eval
 from gen_mesh_utils import repeat_cell
 
@@ -52,15 +52,14 @@ class PUC(object):
         with open(filename, 'wt', encoding='utf-8') as f:
             for cls, pars, act in comps:
                 aflag = '' if act else '#'
-                args, _, _, _ = getargspec(cls.__init__)
-                args = args[1:]
                 targs = []
-                for k in args:
-                    val = pars.get(k)
+                for key, val in pars.items():
+                    if key == 'self':
+                        continue
                     if isinstance(val, nm.ndarray):
-                        targs.append(k + '=' + str(tuple(val)))
+                        targs.append(key + '=' + str(tuple(val)))
                     else:
-                        targs.append(k + '=' + str(val))
+                        targs.append(key + '=' + str(val))
                 f.write(f'{aflag}{cls.__name__};{";".join(targs)}\n')
 
     def save(self, filename):
