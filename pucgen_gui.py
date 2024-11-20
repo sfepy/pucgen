@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
 from PyQt6.QtGui import QFont, QPixmap, QPalette, QColor
 
 from pucgen import PUC, pucgen_classes, version
-from vtk_viewer import VTKViewer
+# from vtk_viewer import VTKViewer
 
 params_dict = {}
 
