@@ -15,10 +15,15 @@ from inspect import signature
 from ast import literal_eval
 from gen_mesh_utils import repeat_cell
 
+default_options = {
+    'Mesh.RecombineMinimumQuality': 2,
+}
+
 
 class PUC(object):
     """Periodic Unit Cell object."""
-    def __init__(self, cell_mat_id=1, base_cell=None):
+    def __init__(self, cell_mat_id=1, base_cell=None,
+                 options=default_options):
         """Init PUC"""
         gmsh.initialize()
         gmsh.logger.start()
@@ -32,6 +37,7 @@ class PUC(object):
         else:
             self.components = [BaseCell(mat_id=cell_mat_id)\
                                if base_cell is None else base_cell]
+        self.options = options
 
     def __str__(self):
         comps = [str(k) for k in self.components]
@@ -238,6 +244,9 @@ class PUC(object):
 
         for d in range(3):
             self.set_periodic(cell_size, d)
+
+        for k, v in self.options.items():
+            gmsh.option.setNumber(k, v)
 
         self.model.mesh.generate(3)
 
