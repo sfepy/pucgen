@@ -11,9 +11,9 @@ from optparse import OptionParser
 import numpy as nm
 import gmsh
 import meshio
-from inspect import signature
 from ast import literal_eval
-from gen_mesh_utils import repeat_cell
+from .gen_mesh_utils import repeat_cell
+from .__init__ import __version__
 
 default_options = {
     'Mesh.RecombineMinimumQuality': 2,
@@ -277,7 +277,7 @@ class BaseComponent(object):
 
     def __init__(self, mat_id=1):
         """Init parameters of the component.
-    
+
         Parameters
         ----------
         mat_id: int
@@ -288,7 +288,7 @@ class BaseComponent(object):
 
     def __call__(self, vid, size):
         """Create the GEO file representation of a object.
-    
+
         Parameters
         ----------
         vid: int
@@ -335,7 +335,7 @@ class BaseEmbeddedComponent(BaseComponent):
 
     def __init__(self, dimension, central_point, direction, el_size, mat_id):
         """Init parameters of the channel component.
-    
+
         Parameters
         ----------
         dimension: float or array
@@ -373,7 +373,7 @@ class EllipsoidalInclusion(BaseEmbeddedComponent):
     def __init__(self, dimension=(0.1, 0.1, 0.1), central_point=(0, 0, 0),
                  direction=(1, 0, 0), el_size=0.05, mat_id=2):
         """Init parameters of the component.
-    
+
         Parameters
         ----------
         dimension: float or array
@@ -413,7 +413,7 @@ class SphericalInclusion(BaseEmbeddedComponent):
     def __init__(self, dimension=0.1, central_point=(0, 0, 0),
                  el_size=0.05, mat_id=2):
         """Init parameters of the component.
-    
+
         Parameters
         ----------
         dimension: float
@@ -440,7 +440,7 @@ class CylindricalInclusion(BaseEmbeddedComponent):
     def __init__(self, dimension=(0.1, 0.5), central_point=(0, 0, 0),
                  direction=(1, 0, 0), el_size=0.05, mat_id=2):
         """Init parameters of the component.
-    
+
         Parameters
         ----------
         dimension: (float, float)
@@ -482,7 +482,7 @@ class CylindricalChannel(CylindricalInclusion):
     def __init__(self, dimension=0.1, central_point=(0, 0, 0), direction='x',
                  el_size=0.05, mat_id=2):
         """Init parameters of the channel component.
-    
+
         Parameters
         ----------
         dimension: float
@@ -506,7 +506,7 @@ class BoxInclusion(BaseEmbeddedComponent):
     def __init__(self, dimension=(0.3, 0.2, 0.1), central_point=(0, 0, 0),
                  direction=None, el_size=0.05, mat_id=2):
         """Init parameters of the component.
-    
+
         Parameters
         ----------
         size: array
@@ -542,7 +542,7 @@ class SandwichLayer(BoxInclusion):
     def __init__(self, dimension=0.1, central_point=(0, 0, 0),
                  direction='x', el_size=0.05, mat_id=2):
         """Init parameters of the component.
-    
+
         Parameters
         ----------
         dimension: array
@@ -567,7 +567,7 @@ class SandwichLayer(BoxInclusion):
 #                  central_point=(0, 0, 0), direction='x', es_dmin=1.1,
 #                  es_dmax=1.3, el_size=0.05, mat_id=2):
 #         """Init parameters of the component.
-    
+
 #         Parameters
 #         ----------
 #         dimension:
@@ -638,7 +638,7 @@ pucgen_classes = [
 ]
 
 usage = 'Usage: %prog [[options] filename_in]'
-version = '0.2'
+
 helps = {
     'reps': 'construct grid by repeating unit cell, number of repetition defined by NX, NY, NZ',
     'sizex': 'resize geometry uniformly such that its size in x-direction is SIZE_X',
@@ -646,7 +646,7 @@ helps = {
 }
 
 def main():
-    parser = OptionParser(usage=usage, version='%prog ' + version)
+    parser = OptionParser(usage=usage, version='%prog ' + __version__)
     parser.add_option('-t', '--tile', metavar='"NX,NY,NZ"',
                       action='store', dest='reps', default=None,
                       help=helps['reps'])
@@ -660,7 +660,7 @@ def main():
     (options, args) = parser.parse_args()
 
     if len(args) == 0: # run GUI
-        from pucgen_gui import MainWindow
+        from .pucgen_gui import MainWindow
         from PyQt6.QtWidgets import QApplication
 
         app = QApplication(sys.argv)

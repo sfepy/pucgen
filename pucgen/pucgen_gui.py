@@ -16,9 +16,10 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
      QHBoxLayout, QVBoxLayout, QTabWidget, QLineEdit,
      QLabel, QPushButton, QFrame, QFileDialog, QMessageBox,
      QComboBox, QListWidget, QDialog, QDialogButtonBox)
-from PyQt6.QtGui import QFont, QPixmap, QPalette, QColor
+from PyQt6.QtGui import QFont, QPixmap, QColor
 
-from pucgen import PUC, pucgen_classes, version
+from .pucgen import PUC, pucgen_classes
+from .__init__ import __version__
 # from vtk_viewer import VTKViewer
 
 params_dict = {}
@@ -402,7 +403,7 @@ class MainWindow(QMainWindow):
         font_info = QFont()
         font_info.setItalic(True)
         font_info.setPixelSize(12)
-        info = QLabel(f'Version: {version}')
+        info = QLabel(f'Version: {__version__}')
         info.setFont(font_info)
         vbox1.addStretch(1)
         vbox1.addWidget(info)

@@ -3,13 +3,37 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["pucgen", "gen_mesh_utils", "pucgen_gui"]
+packages = ["pucgen"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+pucgen = ["*.png"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pucgen.__version__"}
+
+[project.urls]
+homepage = "https://github.com/sfepy/pucgen"
 
 [project]
 name = "pucgen"
-version = "0.2"
+dynamic = ["version"]
 license = {text = "MIT License"}
 readme = "README.md"
+description="PUCGen - Periodic Unit Cell Generator"
 authors = [{name = "Vladimir Lukes", email = "vlukes@kme.zcu.cz"}]
 requires-python = ">= 3.8"
-dependencies = ["gmsh", "meshio"]
+dependencies = ["gmsh", "meshio", "scipy", "pyqt6"]
+keywords = ["periodic mesh", "FEM"]
+classifiers = [
+    "Development Status :: 3 - Alpha",  # 3 - Alpha, 4 - Beta, 5 - Stable
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+pucgen = "pucgen.pucgen:main"
+pucgen-gui = "pucgen.pucgen_gui:main"
